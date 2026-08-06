@@ -8,7 +8,15 @@ fully clickable while the model team finishes training. Once a teammate
 drops a .pkl into /models matching the contract documented at the top of
 utils.py, the relevant tab switches from demo to real predictions
 automatically -- no changes needed here.
+
+CHANGE LOG (this version):
+- The AI Assistant is no longer a tab. It now lives as a floating
+  "farmer" chat bubble (bottom-right corner) that's available on every
+  tab, so the user never has to leave what they're doing to ask it
+  something. See `render_ai_assistant_bubble()` near the bottom.
 """
+
+import time
 
 import pandas as pd
 import plotly.graph_objects as go
@@ -19,7 +27,8 @@ from utils import ai_assistant_reply, model_status, predict_income, predict_yiel
 st.set_page_config(page_title="AgriVision AI", page_icon="🌾", layout="wide")
 
 # ----------------------------------------------------------------------
-# Custom styling -- hero banner, card containers, tab spacing.
+# Custom styling -- hero banner, card containers, tab spacing, and the
+# floating AI-assistant chat bubble.
 # Colors/theme (dark + green) live in .streamlit/config.toml.
 # ----------------------------------------------------------------------
 st.markdown(
@@ -91,6 +100,51 @@ st.markdown(
         border: none;
     }
     button[kind="primary"]:hover { background-color: #16a34a; }
+
+    /* -----------------------------------------------------------
+       Floating AI-assistant "farmer" bubble.
+       We drop an invisible marker div right before the popover,
+       then use a :has() sibling rule to pin that popover's wrapper
+       to the bottom-right corner of the viewport, above everything
+       else (z-index). The button itself is styled into a round
+       avatar so it reads as a little farmer character, not a
+       normal widget.
+       ----------------------------------------------------------- */
+    #av-chat-anchor { display: none; }
+
+    div:has(> div > #av-chat-anchor) + div {
+        position: fixed !important;
+        bottom: 22px;
+        right: 22px;
+        z-index: 9999;
+        width: auto !important;
+    }
+
+    div:has(> div > #av-chat-anchor) + div button {
+        width: 64px;
+        height: 64px;
+        border-radius: 50%;
+        font-size: 1.6rem;
+        background: linear-gradient(135deg, #22c55e, #16a34a);
+        border: 2px solid #0e1414;
+        box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+        color: white;
+    }
+    div:has(> div > #av-chat-anchor) + div button:hover {
+        transform: scale(1.06);
+        box-shadow: 0 8px 22px rgba(0, 0, 0, 0.55);
+    }
+    div:has(> div > #av-chat-anchor) + div button p {
+        font-size: 1.6rem;
+    }
+
+    /* popup panel that opens above the bubble */
+    div[data-testid="stPopoverBody"] {
+        width: 340px;
+        background-color: #131b18;
+        border: 1px solid #21362a;
+        border-radius: 14px;
+    }
     </style>
 
     <div class="av-hero">
@@ -103,7 +157,8 @@ st.markdown(
 )
 
 # ----------------------------------------------------------------------
-# Session state -- this is how tabs share the farmer's profile/data
+# Session state -- this is how tabs (and the floating assistant) share
+# the farmer's profile/data
 # ----------------------------------------------------------------------
 if "profile" not in st.session_state:
     st.session_state.profile = {}
@@ -113,6 +168,8 @@ if "yield_result" not in st.session_state:
     st.session_state.yield_result = None
 if "crop_result" not in st.session_state:
     st.session_state.crop_result = None
+if "chat_history" not in st.session_state:
+    st.session_state.chat_history = []
 
 # ----------------------------------------------------------------------
 # Sidebar
@@ -121,6 +178,19 @@ with st.sidebar:
     st.title("🌾 AgriVision AI")
     st.caption("AI decision support for Indian agriculture")
     st.divider()
+
+    profile = st.session_state.get("profile", {})
+    if profile:
+        st.subheader("👤 Farmer Snapshot")
+        st.markdown(f"**{profile.get('farmer_id', '--')}** · {profile.get('region', '--')}")
+        st.write(f"🌱 {profile.get('current_crop', '--')} · {profile.get('total_land_ha', '--')} ha")
+        if st.session_state.get("income_result"):
+            st.write(f"💰 ₹{st.session_state.income_result['value']:,.0f} / month")
+        st.divider()
+    else:
+        st.caption("Fill in the Farmer Profile tab to see a live snapshot here.")
+        st.divider()
+
     st.subheader("Model status")
     status = model_status()
     for name, live in status.items():
@@ -135,7 +205,6 @@ tabs = st.tabs(
         "🌱 Crop Recommendation",
         "📈 Yield Prediction",
         "🌦️ Weather Dashboard",
-        "🤖 AI Assistant",
         "📄 Reports",
         "📊 Final Dashboard",
     ]
@@ -186,6 +255,7 @@ with tabs[0]:
                 "distance_to_market_km": distance_to_market,
             }
             st.success("Profile saved. It'll now feed the other tabs.")
+            st.toast(f"Profile for {farmer_id} saved!", icon="✅")
 
 # ----------------------------------------------------------------------
 # 2. Income Estimation
@@ -199,10 +269,10 @@ with tabs[1]:
 
         col1, col2 = st.columns(2)
         with col1:
-            crop_yield = st.number_input("Crop Yield per Hectare (tons)", 0.0, 50.0, 10.2)
-            rainfall = st.number_input("Rainfall (mm, seasonal avg)", 0.0, 3000.0, 800.0)
+            crop_yield = st.slider("Crop Yield per Hectare (tons)", 0.0, 50.0, 10.2, help="Average yield across your last few seasons")
+            rainfall = st.slider("Rainfall (mm, seasonal avg)", 0.0, 3000.0, 800.0)
         with col2:
-            land_override = st.number_input(
+            land_override = st.slider(
                 "Total Agricultural Land (hectares)", 0.0, 500.0, float(p.get("total_land_ha", 5.0)),
                 key="land_income"
             )
@@ -218,15 +288,53 @@ with tabs[1]:
                 "distance_to_market_km": p.get("distance_to_market_km", 15.0),
                 "rainfall_mm": rainfall,
             }
-            st.session_state.income_result = predict_income(inputs)
+            with st.spinner("Running income model..."):
+                time.sleep(0.6)
+                st.session_state.income_result = predict_income(inputs)
 
         result = st.session_state.income_result
         if result:
             if result["demo"]:
                 st.warning("Showing a DEMO estimate (formula-based) -- not a real model prediction yet.")
-            c1, c2 = st.columns(2)
-            c1.metric("Predicted Income (monthly)", f"₹ {result['value']:,.0f}")
-            c2.metric("Model Confidence", f"{result['confidence']*100:.0f}%")
+
+            baseline = p.get("non_agri_income", 12000) * 12
+            delta = result["value"] - baseline
+            c1, c2 = st.columns([1.2, 1])
+            with c1:
+                st.metric(
+                    "Predicted Income (monthly)",
+                    f"₹ {result['value']:,.0f}",
+                    delta=f"{delta:,.0f} vs non-agri baseline",
+                )
+                with st.expander("How was this calculated?"):
+                    st.write(
+                        "Demo mode blends land size, crop yield, non-agricultural income, "
+                        "distance to market, and rainfall into one formula. Once the real "
+                        "income model is live, this will show actual feature contributions."
+                        if result["demo"]
+                        else "This is the trained model's live prediction based on your inputs."
+                    )
+            with c2:
+                gauge = go.Figure(
+                    go.Indicator(
+                        mode="gauge+number",
+                        value=result["confidence"] * 100,
+                        number={"suffix": "%"},
+                        title={"text": "Model Confidence"},
+                        gauge={
+                            "axis": {"range": [0, 100]},
+                            "bar": {"color": "#22c55e"},
+                            "bgcolor": "#131b18",
+                            "steps": [
+                                {"range": [0, 40], "color": "#2a1414"},
+                                {"range": [40, 70], "color": "#2a2414"},
+                                {"range": [70, 100], "color": "#14261a"},
+                            ],
+                        },
+                    )
+                )
+                gauge.update_layout(height=220, margin=dict(l=20, r=20, t=40, b=10), paper_bgcolor="rgba(0,0,0,0)", font_color="#e8f0ec")
+                st.plotly_chart(gauge, use_container_width=True)
 
 # ----------------------------------------------------------------------
 # 3. Crop Recommendation
@@ -250,15 +358,45 @@ with tabs[2]:
                 "temperature_c": temperature,
                 "current_crop": p.get("current_crop", "Unknown"),
             }
-            st.session_state.crop_result = recommend_crops(inputs)
+            with st.spinner("AI is analysing soil, climate and market fit..."):
+                time.sleep(0.6)
+                st.session_state.crop_result = recommend_crops(inputs)
 
         result = st.session_state.crop_result
         if result:
             if result["demo"]:
                 st.warning("Showing DEMO suggestions (randomised) -- not a real model prediction yet.")
-            for crop, score in result["crops"]:
-                st.write(f"**{crop}** -- suitability score {score:.2f}")
-                st.progress(min(max(score, 0.0), 1.0))
+
+            crops = [c for c, _ in result["crops"]]
+            scores = [s for _, s in result["crops"]]
+            fig = go.Figure(
+                go.Bar(
+                    x=scores,
+                    y=crops,
+                    orientation="h",
+                    marker_color="#22c55e",
+                    text=[f"{s*100:.0f}%" for s in scores],
+                    textposition="outside",
+                )
+            )
+            fig.update_layout(
+                height=220,
+                margin=dict(l=10, r=30, t=10, b=10),
+                xaxis=dict(range=[0, 1], title="Suitability score"),
+                paper_bgcolor="rgba(0,0,0,0)",
+                plot_bgcolor="rgba(0,0,0,0)",
+                font_color="#e8f0ec",
+                yaxis=dict(autorange="reversed"),
+            )
+            st.plotly_chart(fig, use_container_width=True)
+
+            best_crop = crops[0]
+            with st.expander(f"Why {best_crop}?"):
+                st.write(
+                    f"Based on the soil type, rainfall, and temperature you entered, **{best_crop}** "
+                    "scores highest for this profile. Once the real crop model is live, this will "
+                    "explain the actual decision factors it used."
+                )
 
 # ----------------------------------------------------------------------
 # 4. Yield Prediction
@@ -269,11 +407,11 @@ with tabs[3]:
         col1, col2 = st.columns(2)
         with col1:
             crop_type = st.text_input("Crop Type", value=st.session_state.profile.get("current_crop", "Wheat"))
-            land3 = st.number_input("Total Land (hectares)", 0.0, 500.0, 5.0, key="land3")
+            land3 = st.slider("Total Land (hectares)", 0.0, 500.0, 5.0, key="land3")
         with col2:
-            rainfall3 = st.number_input("Rainfall (mm)", 0.0, 3000.0, 800.0, key="rain3")
-            temp3 = st.number_input("Temperature (°C)", 0.0, 50.0, 27.0, key="temp3")
-        input_costs = st.number_input("Input Costs (₹)", 0, 1000000, 20000)
+            rainfall3 = st.slider("Rainfall (mm)", 0.0, 3000.0, 800.0, key="rain3")
+            temp3 = st.slider("Temperature (°C)", 0.0, 50.0, 27.0, key="temp3")
+        input_costs = st.slider("Input Costs (₹)", 0, 1000000, 20000, step=1000)
 
         if st.button("Predict Yield", type="primary"):
             inputs = {
@@ -283,13 +421,38 @@ with tabs[3]:
                 "temperature_c": temp3,
                 "input_costs": input_costs,
             }
-            st.session_state.yield_result = predict_yield(inputs)
+            with st.spinner("Estimating yield..."):
+                time.sleep(0.6)
+                st.session_state.yield_result = predict_yield(inputs)
 
         result = st.session_state.yield_result
         if result:
             if result["demo"]:
                 st.warning("Showing a DEMO estimate -- not a real model prediction yet.")
-            st.metric("Predicted Yield", f"{result['value']} tons/hectare")
+
+            c1, c2 = st.columns([1, 1.4])
+            c1.metric("Predicted Yield", f"{result['value']} tons/hectare")
+            with c2:
+                # simple 4-season projection band around the point estimate, same
+                # visual language as the income trend chart on Final Dashboard
+                seasons = ["This season", "+1", "+2", "+3"]
+                low = [result["value"] * f for f in (1.0, 0.9, 0.85, 0.8)]
+                high = [result["value"] * f for f in (1.0, 1.1, 1.15, 1.2)]
+                fig = go.Figure()
+                fig.add_trace(go.Scatter(x=seasons, y=high, line=dict(width=0), showlegend=False))
+                fig.add_trace(
+                    go.Scatter(
+                        x=seasons, y=low, fill="tonexty", line=dict(width=0),
+                        fillcolor="rgba(34,197,94,0.25)", showlegend=False,
+                    )
+                )
+                fig.add_trace(go.Scatter(x=seasons, y=[result["value"]] * 4, line=dict(color="#22c55e"), name="Point estimate"))
+                fig.update_layout(
+                    height=200, margin=dict(l=10, r=10, t=10, b=10),
+                    paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color="#e8f0ec",
+                    yaxis_title="tons/ha",
+                )
+                st.plotly_chart(fig, use_container_width=True)
 
 # ----------------------------------------------------------------------
 # 5. Weather Dashboard
@@ -315,33 +478,9 @@ with tabs[4]:
         st.bar_chart(demo_weather.set_index("Date")[["Rainfall (mm)"]])
 
 # ----------------------------------------------------------------------
-# 6. AI Assistant
+# 6. Reports
 # ----------------------------------------------------------------------
 with tabs[5]:
-    with st.container(border=True):
-        st.header("AI Assistant")
-        st.caption("Ask about your predicted income, crop choices, or general farming advice.")
-
-        if "chat_history" not in st.session_state:
-            st.session_state.chat_history = []
-
-        for role, msg in st.session_state.chat_history:
-            with st.chat_message(role):
-                st.write(msg)
-
-        question = st.chat_input("Ask something...")
-        if question:
-            st.session_state.chat_history.append(("user", question))
-            p = st.session_state.profile
-            context = {"summary": f"{p.get('current_crop', 'a crop')} farmer with {p.get('total_land_ha', '?')} ha in {p.get('region', 'India')}"}
-            reply = ai_assistant_reply(question, context)
-            st.session_state.chat_history.append(("assistant", reply))
-            st.rerun()
-
-# ----------------------------------------------------------------------
-# 7. Reports
-# ----------------------------------------------------------------------
-with tabs[6]:
     with st.container(border=True):
         st.header("Reports")
         p = st.session_state.profile
@@ -368,16 +507,16 @@ with tabs[6]:
             st.download_button("Download Report (.txt)", report_text, file_name=f"{p.get('farmer_id', 'farmer')}_report.txt")
 
 # ----------------------------------------------------------------------
-# 8. Final Dashboard
+# 7. Final Dashboard
 # ----------------------------------------------------------------------
-with tabs[7]:
+with tabs[6]:
     with st.container(border=True):
-        st.header("Final Dashboard")
+        st.header("📊 Final Dashboard")
         p = st.session_state.profile
         if not p:
             st.info("Fill in the Farmer Profile tab first.")
         else:
-            c1, c2, c3 = st.columns(3)
+            c1, c2, c3, c4 = st.columns(4)
             c1.metric("Land Holding", f"{p.get('total_land_ha')} ha")
             c2.metric(
                 "Predicted Income",
@@ -387,16 +526,109 @@ with tabs[7]:
                 "Predicted Yield",
                 f"{st.session_state.yield_result['value']} t/ha" if st.session_state.yield_result else "Not run yet",
             )
+            top_crop = st.session_state.crop_result["crops"][0][0] if st.session_state.crop_result else "Not run yet"
+            c4.metric("Top Recommended Crop", top_crop)
 
-            if st.session_state.income_result:
-                # Simple simulated seasonal trend around the predicted point, same idea
-                # as the reference demo's "Simulated Income Trend Over Seasons" chart.
-                base = st.session_state.income_result["value"]
-                seasons = ["Season 1", "Season 2", "Season 3", "Season 4"]
-                values = [base * f for f in (0.85, 1.05, 0.95, 1.0)]
-                fig = go.Figure()
-                fig.add_trace(go.Scatter(x=seasons, y=values, fill="tozeroy", line=dict(color="#2ecc71")))
-                fig.update_layout(title="Simulated Income Trend Over Seasons", yaxis_title="₹", height=350)
-                st.plotly_chart(fig, use_container_width=True)
-            else:
-                st.caption("Run Income Estimation to see the seasonal trend chart here.")
+            col_left, col_right = st.columns([1.4, 1])
+
+            with col_left:
+                if st.session_state.income_result:
+                    # Simple simulated seasonal trend around the predicted point, same idea
+                    # as the reference demo's "Simulated Income Trend Over Seasons" chart.
+                    base = st.session_state.income_result["value"]
+                    seasons = ["Season 1", "Season 2", "Season 3", "Season 4"]
+                    values = [base * f for f in (0.85, 1.05, 0.95, 1.0)]
+                    fig = go.Figure()
+                    fig.add_trace(go.Scatter(x=seasons, y=values, fill="tozeroy", line=dict(color="#22c55e")))
+                    fig.update_layout(
+                        title="Simulated Income Trend Over Seasons", yaxis_title="₹", height=320,
+                        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color="#e8f0ec",
+                    )
+                    st.plotly_chart(fig, use_container_width=True)
+                else:
+                    st.caption("Run Income Estimation to see the seasonal trend chart here.")
+
+                if st.session_state.crop_result:
+                    crops = [c for c, _ in st.session_state.crop_result["crops"]]
+                    scores = [s for _, s in st.session_state.crop_result["crops"]]
+                    bar = go.Figure(go.Bar(x=crops, y=scores, marker_color="#4ade80"))
+                    bar.update_layout(
+                        title="Recommended Crops", height=280, yaxis=dict(range=[0, 1], title="Score"),
+                        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color="#e8f0ec",
+                    )
+                    st.plotly_chart(bar, use_container_width=True)
+
+            with col_right:
+                # Radar chart giving a quick visual "farmer profile" snapshot.
+                # Values are normalised 0-1 just for shape -- purely illustrative.
+                categories = ["Land", "Non-Ag Income", "Market Access", "Yield", "Income"]
+                land_score = min(p.get("total_land_ha", 0) / 20, 1)
+                nonagri_score = min(p.get("non_agri_income", 0) / 50000, 1)
+                market_score = 1 - min(p.get("distance_to_market_km", 0) / 100, 1)
+                yield_score = min((st.session_state.yield_result["value"] if st.session_state.yield_result else 3) / 10, 1)
+                income_score = min((st.session_state.income_result["value"] if st.session_state.income_result else 20000) / 100000, 1)
+                values = [land_score, nonagri_score, market_score, yield_score, income_score]
+
+                radar = go.Figure()
+                radar.add_trace(go.Scatterpolar(r=values + values[:1], theta=categories + categories[:1], fill="toself", line_color="#22c55e"))
+                radar.update_layout(
+                    polar=dict(
+                        radialaxis=dict(visible=True, range=[0, 1], showticklabels=False),
+                        bgcolor="rgba(0,0,0,0)",
+                    ),
+                    showlegend=False, height=340, title="Farmer Profile Snapshot",
+                    paper_bgcolor="rgba(0,0,0,0)", font_color="#e8f0ec",
+                )
+                st.plotly_chart(radar, use_container_width=True)
+                st.caption("Illustrative snapshot -- not a scored metric from any model.")
+
+
+# ----------------------------------------------------------------------
+# Floating AI Assistant "farmer" bubble -- lives outside the tabs, so it
+# renders on top of whichever tab is open. Tapping it pops open a small
+# chat panel anchored to the bubble.
+# ----------------------------------------------------------------------
+def render_ai_assistant_bubble():
+    # invisible marker the CSS above hooks onto, so the popover that
+    # follows gets pinned to the bottom-right corner of the screen
+    st.markdown('<div id="av-chat-anchor"></div>', unsafe_allow_html=True)
+
+    AVATARS = {"user": "🧑‍🌾", "assistant": "🌾"}
+
+    with st.popover("🧑‍🌾", use_container_width=False, help="Ask AgriVision AI"):
+        st.markdown("**🌾 AgriVision Assistant**")
+        st.caption("Ask about your predicted income, crop choices, or general farming advice.")
+
+        if not st.session_state.chat_history:
+            st.markdown("**Try asking:**")
+            suggestions = [
+                "How can I increase my income?",
+                "What crop suits my land best?",
+                "Is this a good time to sell?",
+            ]
+            clicked = None
+            for s in suggestions:
+                if st.button(s, use_container_width=True, key=f"chip_{s}"):
+                    clicked = s
+        else:
+            clicked = None
+
+        chat_box = st.container(height=280)
+        with chat_box:
+            for role, msg in st.session_state.chat_history:
+                with st.chat_message(role, avatar=AVATARS.get(role)):
+                    st.write(msg)
+
+        question = st.chat_input("Ask something...", key="floating_chat_input") or clicked
+        if question:
+            st.session_state.chat_history.append(("user", question))
+            p = st.session_state.profile
+            context = {"summary": f"{p.get('current_crop', 'a crop')} farmer with {p.get('total_land_ha', '?')} ha in {p.get('region', 'India')}"}
+            with st.spinner("AgriVision AI is thinking..."):
+                time.sleep(0.5)
+                reply = ai_assistant_reply(question, context)
+            st.session_state.chat_history.append(("assistant", reply))
+            st.rerun()
+
+
+render_ai_assistant_bubble()
