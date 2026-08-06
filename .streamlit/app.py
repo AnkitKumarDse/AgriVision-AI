@@ -8,6 +8,12 @@ fully clickable while the model team finishes training. Once a teammate
 drops a .pkl into /models matching the contract documented at the top of
 utils.py, the relevant tab switches from demo to real predictions
 automatically -- no changes needed here.
+
+CHANGE LOG (this version):
+- The AI Assistant is no longer a tab. It now lives as a floating
+  "farmer" chat bubble (bottom-right corner) that's available on every
+  tab, so the user never has to leave what they're doing to ask it
+  something. See `render_ai_assistant_bubble()` near the bottom.
 """
 
 import time
@@ -21,7 +27,8 @@ from utils import ai_assistant_reply, model_status, predict_income, predict_yiel
 st.set_page_config(page_title="AgriVision AI", page_icon="🌾", layout="wide")
 
 # ----------------------------------------------------------------------
-# Custom styling -- hero banner, card containers, tab spacing.
+# Custom styling -- hero banner, card containers, tab spacing, and the
+# floating AI-assistant chat bubble.
 # Colors/theme (dark + green) live in .streamlit/config.toml.
 # ----------------------------------------------------------------------
 st.markdown(
@@ -93,6 +100,51 @@ st.markdown(
         border: none;
     }
     button[kind="primary"]:hover { background-color: #16a34a; }
+
+    /* -----------------------------------------------------------
+       Floating AI-assistant "farmer" bubble.
+       We drop an invisible marker div right before the popover,
+       then use a :has() sibling rule to pin that popover's wrapper
+       to the bottom-right corner of the viewport, above everything
+       else (z-index). The button itself is styled into a round
+       avatar so it reads as a little farmer character, not a
+       normal widget.
+       ----------------------------------------------------------- */
+    #av-chat-anchor { display: none; }
+
+    div:has(> div > #av-chat-anchor) + div {
+        position: fixed !important;
+        bottom: 22px;
+        right: 22px;
+        z-index: 9999;
+        width: auto !important;
+    }
+
+    div:has(> div > #av-chat-anchor) + div button {
+        width: 64px;
+        height: 64px;
+        border-radius: 50%;
+        font-size: 1.6rem;
+        background: linear-gradient(135deg, #22c55e, #16a34a);
+        border: 2px solid #0e1414;
+        box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+        color: white;
+    }
+    div:has(> div > #av-chat-anchor) + div button:hover {
+        transform: scale(1.06);
+        box-shadow: 0 8px 22px rgba(0, 0, 0, 0.55);
+    }
+    div:has(> div > #av-chat-anchor) + div button p {
+        font-size: 1.6rem;
+    }
+
+    /* popup panel that opens above the bubble */
+    div[data-testid="stPopoverBody"] {
+        width: 340px;
+        background-color: #131b18;
+        border: 1px solid #21362a;
+        border-radius: 14px;
+    }
     </style>
 
     <div class="av-hero">
@@ -105,7 +157,8 @@ st.markdown(
 )
 
 # ----------------------------------------------------------------------
-# Session state -- this is how tabs share the farmer's profile/data
+# Session state -- this is how tabs (and the floating assistant) share
+# the farmer's profile/data
 # ----------------------------------------------------------------------
 if "profile" not in st.session_state:
     st.session_state.profile = {}
@@ -115,6 +168,8 @@ if "yield_result" not in st.session_state:
     st.session_state.yield_result = None
 if "crop_result" not in st.session_state:
     st.session_state.crop_result = None
+if "chat_history" not in st.session_state:
+    st.session_state.chat_history = []
 
 # ----------------------------------------------------------------------
 # Sidebar
@@ -150,7 +205,6 @@ tabs = st.tabs(
         "🌱 Crop Recommendation",
         "📈 Yield Prediction",
         "🌦️ Weather Dashboard",
-        "🤖 AI Assistant",
         "📄 Reports",
         "📊 Final Dashboard",
     ]
@@ -424,54 +478,9 @@ with tabs[4]:
         st.bar_chart(demo_weather.set_index("Date")[["Rainfall (mm)"]])
 
 # ----------------------------------------------------------------------
-# 6. AI Assistant
+# 6. Reports
 # ----------------------------------------------------------------------
 with tabs[5]:
-    with st.container(border=True):
-        st.header("🤖 AI Assistant")
-        st.caption("Ask about your predicted income, crop choices, or general farming advice.")
-
-        if "chat_history" not in st.session_state:
-            st.session_state.chat_history = []
-
-        AVATARS = {"user": "🧑‍🌾", "assistant": "🌾"}
-
-        if not st.session_state.chat_history:
-            st.markdown("**Try asking:**")
-            chips = st.columns(3)
-            suggestions = [
-                "How can I increase my income?",
-                "What crop suits my land best?",
-                "Is this a good time to sell?",
-            ]
-            clicked = None
-            for col, s in zip(chips, suggestions):
-                if col.button(s, use_container_width=True):
-                    clicked = s
-        else:
-            clicked = None
-
-        chat_box = st.container(height=360)
-        with chat_box:
-            for role, msg in st.session_state.chat_history:
-                with st.chat_message(role, avatar=AVATARS.get(role)):
-                    st.write(msg)
-
-        question = st.chat_input("Ask something...") or clicked
-        if question:
-            st.session_state.chat_history.append(("user", question))
-            p = st.session_state.profile
-            context = {"summary": f"{p.get('current_crop', 'a crop')} farmer with {p.get('total_land_ha', '?')} ha in {p.get('region', 'India')}"}
-            with st.spinner("AgriVision AI is thinking..."):
-                time.sleep(0.5)
-                reply = ai_assistant_reply(question, context)
-            st.session_state.chat_history.append(("assistant", reply))
-            st.rerun()
-
-# ----------------------------------------------------------------------
-# 7. Reports
-# ----------------------------------------------------------------------
-with tabs[6]:
     with st.container(border=True):
         st.header("Reports")
         p = st.session_state.profile
@@ -498,9 +507,9 @@ with tabs[6]:
             st.download_button("Download Report (.txt)", report_text, file_name=f"{p.get('farmer_id', 'farmer')}_report.txt")
 
 # ----------------------------------------------------------------------
-# 8. Final Dashboard
+# 7. Final Dashboard
 # ----------------------------------------------------------------------
-with tabs[7]:
+with tabs[6]:
     with st.container(border=True):
         st.header("📊 Final Dashboard")
         p = st.session_state.profile
@@ -572,3 +581,54 @@ with tabs[7]:
                 )
                 st.plotly_chart(radar, use_container_width=True)
                 st.caption("Illustrative snapshot -- not a scored metric from any model.")
+
+
+# ----------------------------------------------------------------------
+# Floating AI Assistant "farmer" bubble -- lives outside the tabs, so it
+# renders on top of whichever tab is open. Tapping it pops open a small
+# chat panel anchored to the bubble.
+# ----------------------------------------------------------------------
+def render_ai_assistant_bubble():
+    # invisible marker the CSS above hooks onto, so the popover that
+    # follows gets pinned to the bottom-right corner of the screen
+    st.markdown('<div id="av-chat-anchor"></div>', unsafe_allow_html=True)
+
+    AVATARS = {"user": "🧑‍🌾", "assistant": "🌾"}
+
+    with st.popover("🧑‍🌾", use_container_width=False, help="Ask AgriVision AI"):
+        st.markdown("**🌾 AgriVision Assistant**")
+        st.caption("Ask about your predicted income, crop choices, or general farming advice.")
+
+        if not st.session_state.chat_history:
+            st.markdown("**Try asking:**")
+            suggestions = [
+                "How can I increase my income?",
+                "What crop suits my land best?",
+                "Is this a good time to sell?",
+            ]
+            clicked = None
+            for s in suggestions:
+                if st.button(s, use_container_width=True, key=f"chip_{s}"):
+                    clicked = s
+        else:
+            clicked = None
+
+        chat_box = st.container(height=280)
+        with chat_box:
+            for role, msg in st.session_state.chat_history:
+                with st.chat_message(role, avatar=AVATARS.get(role)):
+                    st.write(msg)
+
+        question = st.chat_input("Ask something...", key="floating_chat_input") or clicked
+        if question:
+            st.session_state.chat_history.append(("user", question))
+            p = st.session_state.profile
+            context = {"summary": f"{p.get('current_crop', 'a crop')} farmer with {p.get('total_land_ha', '?')} ha in {p.get('region', 'India')}"}
+            with st.spinner("AgriVision AI is thinking..."):
+                time.sleep(0.5)
+                reply = ai_assistant_reply(question, context)
+            st.session_state.chat_history.append(("assistant", reply))
+            st.rerun()
+
+
+render_ai_assistant_bubble()
