@@ -1,72 +1,211 @@
-# ------------------------------------------------
+import streamlit as st
+
+# -----------------------------
+# PAGE CONFIG
+# -----------------------------
+st.set_page_config(
+    page_title="AgriVision AI",
+    page_icon="🌾",
+    layout="wide"
+)
+
+# -----------------------------
+# CUSTOM CSS
+# -----------------------------
+st.markdown("""
+<style>
+
+.hero{
+background:#1b5e20;
+padding:40px;
+border-radius:15px;
+color:white;
+}
+
+.footer{
+text-align:center;
+color:gray;
+padding:20px;
+}
+
+</style>
+""", unsafe_allow_html=True)
+
+# -----------------------------
+# SIDEBAR
+# -----------------------------
+st.sidebar.title("🌾 AgriVision AI")
+
+page = st.sidebar.radio(
+    "Navigation",
+    [
+        "🏠 Home",
+        "👨‍🌾 Farmer Registration",
+        "💰 Income Prediction",
+        "🌱 Crop Recommendation",
+        "📈 Yield Prediction",
+        "🌦 Weather Intelligence",
+        "🤖 AI Assistant",
+        "📊 Analytics"
+    ]
+)
+
+# =====================================================
 # HOME PAGE
-# ------------------------------------------------
+# =====================================================
 
 if page == "🏠 Home":
 
-    # ---------------- Hero ----------------
-
-    st.title("🌾 AgriVision AI")
-
-    st.subheader("AI-Powered Decision Support System for Indian Agriculture")
-
     st.markdown("""
-Helping Indian farmers make smarter decisions using Artificial Intelligence,
-Machine Learning, Weather Analytics and Data-Driven Insights.
-""")
+    <div class='hero'>
 
-    st.divider()
+    <h1>🌾 AgriVision AI</h1>
 
-    # ---------------- Statistics ----------------
+    <h3>AI Powered Agriculture Intelligence Platform</h3>
 
-    st.subheader("📊 Platform Statistics")
+    <p>
+    Empowering Indian farmers through Artificial Intelligence,
+    Machine Learning, Weather Analytics and Smart Recommendations.
+    </p>
 
-    col1, col2, col3, col4 = st.columns(4)
+    </div>
+    """, unsafe_allow_html=True)
+
+    st.write("")
+    st.write("")
+
+    col1,col2,col3,col4 = st.columns(4)
 
     with col1:
-        st.metric("👨‍🌾 Farmers", "1,245")
+        st.metric("Registered Farmers","1,245")
 
     with col2:
-        st.metric("💰 Predictions", "18,532")
+        st.metric("Predictions","18,532")
 
     with col3:
-        st.metric("🎯 Accuracy", "94.8%")
+        st.metric("Accuracy","94.8%")
 
     with col4:
-        st.metric("📍 Districts", "210")
+        st.metric("Districts","210")
 
-    st.divider()
+    st.write("")
+    st.header("🚀 Platform Modules")
 
-    # ---------------- Modules ----------------
+    c1,c2,c3,c4 = st.columns(4)
 
-    st.subheader("🚀 Platform Modules")
+    with c1:
+        st.info("👨‍🌾 Farmer Registration")
 
-    row1 = st.columns(4)
+    with c2:
+        st.info("💰 Income Prediction")
 
-    row1[0].info("👨‍🌾 Farmer Registration")
-    row1[1].info("💰 Income Prediction")
-    row1[2].info("🌱 Crop Recommendation")
-    row1[3].info("📈 Yield Prediction")
+    with c3:
+        st.info("🌱 Crop Recommendation")
 
-    row2 = st.columns(4)
+    with c4:
+        st.info("📈 Yield Prediction")
 
-    row2[0].info("🌦 Weather Intelligence")
-    row2[1].info("🤖 AI Assistant")
-    row2[2].info("📊 Analytics")
-    row2[3].info("🗺 GIS Mapping")
+    c5,c6,c7,c8 = st.columns(4)
 
-    st.divider()
+    with c5:
+        st.info("🌦 Weather Intelligence")
 
-    # ---------------- Vision ----------------
+    with c6:
+        st.info("🤖 AI Assistant")
 
+    with c7:
+        st.info("📊 Analytics")
+
+    with c8:
+        st.info("🗺 GIS Mapping")
+
+    st.write("")
     st.subheader("📌 Vision")
 
     st.write("""
-AgriVision AI is an intelligent agriculture platform that combines Artificial Intelligence,
-Machine Learning, Weather Intelligence and Government Agricultural Data to help Indian
-farmers improve productivity, increase income and make better farming decisions.
+AgriVision AI is an end-to-end decision support platform for Indian agriculture.
+
+Our objective is to combine Artificial Intelligence, Machine Learning,
+Weather Intelligence, Remote Sensing and Government Agricultural Data
+to improve farmers' income and productivity.
 """)
 
-    st.divider()
+    st.markdown("<hr>", unsafe_allow_html=True)
 
-    st.caption("© 2026 AgriVision AI")
+    st.markdown("""
+<div class='footer'>
+© 2026 AgriVision AI
+</div>
+""", unsafe_allow_html=True)
+
+# =====================================================
+# OTHER PAGES
+# =====================================================
+
+elif page == "👨‍🌾 Farmer Registration":
+
+    st.title("👨‍🌾 Farmer Registration")
+
+    name = st.text_input("Farmer Name")
+
+    age = st.number_input("Age",18,100)
+
+    state = st.text_input("State")
+
+    district = st.text_input("District")
+
+    land = st.number_input("Land Size (Acres)",0.0)
+
+    crop = st.text_input("Primary Crop")
+
+    if st.button("Register Farmer"):
+        st.success("Farmer Registered Successfully ✅")
+
+elif page == "💰 Income Prediction":
+
+    st.title("💰 Income Prediction")
+
+    st.info("Income Prediction Model Coming Soon")
+
+elif page == "🌱 Crop Recommendation":
+
+    st.title("🌱 Crop Recommendation")
+
+    st.info("Crop Recommendation Module Coming Soon")
+
+elif page == "📈 Yield Prediction":
+
+    st.title("📈 Yield Prediction")
+
+    st.info("Yield Prediction Module Coming Soon")
+
+elif page == "🌦 Weather Intelligence":
+
+    st.title("🌦 Weather Intelligence")
+
+    st.info("Weather Intelligence Module Coming Soon")
+
+elif page == "🤖 AI Assistant":
+
+    st.title("🤖 AI Assistant")
+
+    question = st.text_area("Ask your farming question")
+
+    if st.button("Ask AI"):
+        st.success("AI Response will appear here.")
+
+elif page == "📊 Analytics":
+
+    st.title("📊 Analytics Dashboard")
+
+    col1,col2,col3 = st.columns(3)
+
+    col1.metric("Farmers",1245)
+
+    col2.metric("Predictions",18532)
+
+    col3.metric("Accuracy","94.8%")
+
+    st.bar_chart({
+        "Predictions":[120,180,240,310,450]
+    })
