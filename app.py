@@ -16,7 +16,9 @@ CHANGE LOG (this version):
   something. See `render_ai_assistant_bubble()` near the bottom.
 """
 
+import base64
 import time
+from pathlib import Path
 
 import pandas as pd
 import plotly.graph_objects as go
@@ -25,6 +27,23 @@ import streamlit as st
 from utils import ai_assistant_reply, model_status, predict_income, predict_yield, recommend_crops
 
 st.set_page_config(page_title="AgriVision AI", page_icon="🌾", layout="wide")
+
+
+def _load_farmer_icon_b64():
+    """
+    Loads assets/farmer_icon.png (next to this file) and returns it as a
+    base64 string so it can be embedded straight into CSS as a
+    background-image -- no separate image hosting needed.
+    Falls back to None (and the bubble falls back to an emoji) if the
+    file isn't there, e.g. it wasn't committed to the repo.
+    """
+    icon_path = Path(__file__).parent / "assets" / "farmer_icon.png"
+    if icon_path.exists():
+        return base64.b64encode(icon_path.read_bytes()).decode()
+    return None
+
+
+FARMER_ICON_B64 = _load_farmer_icon_b64()
 
 # ----------------------------------------------------------------------
 # Custom styling -- hero banner, card containers, tab spacing, and the
@@ -103,39 +122,76 @@ st.markdown(
 
     /* -----------------------------------------------------------
        Floating AI-assistant "farmer" bubble.
-       We drop an invisible marker div right before the popover,
-       then use a :has() sibling rule to pin that popover's wrapper
-       to the bottom-right corner of the viewport, above everything
-       else (z-index). The button itself is styled into a round
-       avatar so it reads as a little farmer character, not a
-       normal widget.
+       Targeted directly by Streamlit's own data-testid for a popover
+       widget (div[data-testid="stPopover"]) rather than guessing at
+       DOM nesting depth -- this is stable across Streamlit versions.
+       Pinned to the LEFT side of the viewport, a little above center,
+       above everything else (z-index). The button is styled into a
+       round avatar with an idle float, a hover "greet", and a press
+       animation so it reads as a little living farmer character
+       rather than a normal widget.
        ----------------------------------------------------------- */
-    #av-chat-anchor { display: none; }
-
-    div:has(> div > #av-chat-anchor) + div {
+    div[data-testid="stPopover"] {
         position: fixed !important;
-        bottom: 22px;
-        right: 22px;
+        top: 58%;
+        left: 26px;
+        margin-top: -34px; /* half the button's height, to vertically anchor at 58% */
         z-index: 9999;
         width: auto !important;
+        animation: av-bob 3.2s ease-in-out infinite;
     }
 
-    div:has(> div > #av-chat-anchor) + div button {
-        width: 64px;
-        height: 64px;
+    @keyframes av-bob {
+        0%, 100% { transform: translateY(0); }
+        50% { transform: translateY(-10px); }
+    }
+
+    div[data-testid="stPopover"] button {
+        position: relative;
+        width: 68px;
+        height: 68px;
         border-radius: 50%;
-        font-size: 1.6rem;
+        font-size: 1.7rem;
         background: linear-gradient(135deg, #22c55e, #16a34a);
-        border: 2px solid #0e1414;
+        border: 3px solid #0e1414;
         box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
         color: white;
+        transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;
     }
-    div:has(> div > #av-chat-anchor) + div button:hover {
-        transform: scale(1.06);
-        box-shadow: 0 8px 22px rgba(0, 0, 0, 0.55);
+    div[data-testid="stPopover"] button:hover {
+        transform: scale(1.12) rotate(-6deg);
+        box-shadow: 0 10px 26px rgba(34, 197, 94, 0.45);
+        border-color: #4ade80;
     }
-    div:has(> div > #av-chat-anchor) + div button p {
-        font-size: 1.6rem;
+    div[data-testid="stPopover"] button:active {
+        transform: scale(0.9) rotate(0deg);
+    }
+    div[data-testid="stPopover"] button p {
+        font-size: 1.7rem;
+    }
+
+    /* small "speech" hint that peeks out on hover, to invite a click */
+    div[data-testid="stPopover"] button::after {
+        content: "Ask me! 💬";
+        position: absolute;
+        left: 82px;
+        top: 50%;
+        transform: translateY(-50%) translateX(-6px);
+        background: #16261d;
+        border: 1px solid #21362a;
+        color: #e8f0ec;
+        padding: 6px 12px;
+        border-radius: 8px;
+        font-size: 0.8rem;
+        white-space: nowrap;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.2s ease, transform 0.2s ease;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+    }
+    div[data-testid="stPopover"] button:hover::after {
+        opacity: 1;
+        transform: translateY(-50%) translateX(0);
     }
 
     /* popup panel that opens above the bubble */
@@ -144,6 +200,21 @@ st.markdown(
         background-color: #131b18;
         border: 1px solid #21362a;
         border-radius: 14px;
+        animation: av-panel-in 0.18s ease-out;
+    }
+    @keyframes av-panel-in {
+        0% { opacity: 0; transform: translateY(6px) scale(0.97); }
+        100% { opacity: 1; transform: translateY(0) scale(1); }
+    }
+
+    /* chip buttons and suggestions inside the chat panel get a little
+       lift on hover so the panel feels responsive too */
+    div[data-testid="stPopoverBody"] button {
+        transition: transform 0.15s ease, border-color 0.15s ease;
+    }
+    div[data-testid="stPopoverBody"] button:hover {
+        transform: translateX(2px);
+        border-color: #4ade80 !important;
     }
     </style>
 
@@ -589,11 +660,76 @@ with tabs[6]:
 # chat panel anchored to the bubble.
 # ----------------------------------------------------------------------
 def render_ai_assistant_bubble():
-    # invisible marker the CSS above hooks onto, so the popover that
-    # follows gets pinned to the bottom-right corner of the screen
-    st.markdown('<div id="av-chat-anchor"></div>', unsafe_allow_html=True)
-
     AVATARS = {"user": "🧑‍🌾", "assistant": "🌾"}
+
+    # Swap the plain emoji for the uploaded farmer artwork, if it's been
+    # committed to assets/farmer_icon.png. This is a separate, small CSS
+    # block (rather than folding it into the big static block above)
+    # because it needs the base64 string computed at runtime.
+    if FARMER_ICON_B64:
+        st.markdown(
+            f"""
+            <style>
+            div[data-testid="stPopover"] button {{
+                background-image: url('data:image/png;base64,{FARMER_ICON_B64}');
+                background-size: cover;
+                background-position: center;
+                background-repeat: no-repeat;
+                font-size: 0 !important;
+                color: transparent !important;
+            }}
+            div[data-testid="stPopover"] button p {{
+                display: none;
+            }}
+            </style>
+            """,
+            unsafe_allow_html=True,
+        )
+
+    # Draw a bit of extra attention (pulsing ring + bouncing badge) until
+    # the user's actually chatted with it at least once.
+    if not st.session_state.chat_history:
+        st.markdown(
+            """
+            <style>
+            div[data-testid="stPopover"]::before {
+                content: "";
+                position: absolute;
+                inset: -10px;
+                border-radius: 50%;
+                background: rgba(34, 197, 94, 0.45);
+                animation: av-pulse 2s ease-out infinite;
+                z-index: -1;
+            }
+            @keyframes av-pulse {
+                0% { transform: scale(0.85); opacity: 0.7; }
+                70% { transform: scale(1.55); opacity: 0; }
+                100% { transform: scale(1.55); opacity: 0; }
+            }
+            div[data-testid="stPopover"] button::before {
+                content: "💬";
+                position: absolute;
+                top: -6px;
+                right: -6px;
+                background: #facc15;
+                border-radius: 50%;
+                width: 24px;
+                height: 24px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                font-size: 12px;
+                animation: av-badge-bounce 1.6s ease-in-out infinite;
+                box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+            }
+            @keyframes av-badge-bounce {
+                0%, 100% { transform: translateY(0); }
+                50% { transform: translateY(-5px); }
+            }
+            </style>
+            """,
+            unsafe_allow_html=True,
+        )
 
     with st.popover("🧑‍🌾", use_container_width=False, help="Ask AgriVision AI"):
         st.markdown("**🌾 AgriVision Assistant**")
