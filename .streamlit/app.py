@@ -122,21 +122,20 @@ st.markdown(
 
     /* -----------------------------------------------------------
        Floating AI-assistant "farmer" bubble.
-       We drop an invisible marker div right before the popover,
-       then use a :has() sibling rule to pin that popover's wrapper
-       to the LEFT side of the viewport, a little above center, above
-       everything else (z-index). The button itself is styled into a
+       Targeted directly by Streamlit's own data-testid for a popover
+       widget (div[data-testid="stPopover"]) rather than guessing at
+       DOM nesting depth -- this is stable across Streamlit versions.
+       Pinned to the LEFT side of the viewport, a little above center,
+       above everything else (z-index). The button is styled into a
        round avatar with an idle float, a hover "greet", and a press
        animation so it reads as a little living farmer character
        rather than a normal widget.
        ----------------------------------------------------------- */
-    #av-chat-anchor { display: none; }
-
-    div:has(> div > #av-chat-anchor) + div {
+    div[data-testid="stPopover"] {
         position: fixed !important;
         top: 58%;
         left: 26px;
-        margin-top: -32px; /* half the button's height, to vertically anchor at 58% */
+        margin-top: -34px; /* half the button's height, to vertically anchor at 58% */
         z-index: 9999;
         width: auto !important;
         animation: av-bob 3.2s ease-in-out infinite;
@@ -147,7 +146,7 @@ st.markdown(
         50% { transform: translateY(-10px); }
     }
 
-    div:has(> div > #av-chat-anchor) + div button {
+    div[data-testid="stPopover"] button {
         position: relative;
         width: 68px;
         height: 68px;
@@ -159,20 +158,20 @@ st.markdown(
         color: white;
         transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;
     }
-    div:has(> div > #av-chat-anchor) + div button:hover {
+    div[data-testid="stPopover"] button:hover {
         transform: scale(1.12) rotate(-6deg);
         box-shadow: 0 10px 26px rgba(34, 197, 94, 0.45);
         border-color: #4ade80;
     }
-    div:has(> div > #av-chat-anchor) + div button:active {
+    div[data-testid="stPopover"] button:active {
         transform: scale(0.9) rotate(0deg);
     }
-    div:has(> div > #av-chat-anchor) + div button p {
+    div[data-testid="stPopover"] button p {
         font-size: 1.7rem;
     }
 
     /* small "speech" hint that peeks out on hover, to invite a click */
-    div:has(> div > #av-chat-anchor) + div button::after {
+    div[data-testid="stPopover"] button::after {
         content: "Ask me! 💬";
         position: absolute;
         left: 82px;
@@ -190,7 +189,7 @@ st.markdown(
         transition: opacity 0.2s ease, transform 0.2s ease;
         box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
     }
-    div:has(> div > #av-chat-anchor) + div button:hover::after {
+    div[data-testid="stPopover"] button:hover::after {
         opacity: 1;
         transform: translateY(-50%) translateX(0);
     }
@@ -661,10 +660,6 @@ with tabs[6]:
 # chat panel anchored to the bubble.
 # ----------------------------------------------------------------------
 def render_ai_assistant_bubble():
-    # invisible marker the CSS above hooks onto, so the popover that
-    # follows gets pinned to the left side of the screen
-    st.markdown('<div id="av-chat-anchor"></div>', unsafe_allow_html=True)
-
     AVATARS = {"user": "🧑‍🌾", "assistant": "🌾"}
 
     # Swap the plain emoji for the uploaded farmer artwork, if it's been
@@ -675,7 +670,7 @@ def render_ai_assistant_bubble():
         st.markdown(
             f"""
             <style>
-            div:has(> div > #av-chat-anchor) + div button {{
+            div[data-testid="stPopover"] button {{
                 background-image: url('data:image/png;base64,{FARMER_ICON_B64}');
                 background-size: cover;
                 background-position: center;
@@ -683,7 +678,7 @@ def render_ai_assistant_bubble():
                 font-size: 0 !important;
                 color: transparent !important;
             }}
-            div:has(> div > #av-chat-anchor) + div button p {{
+            div[data-testid="stPopover"] button p {{
                 display: none;
             }}
             </style>
@@ -697,7 +692,7 @@ def render_ai_assistant_bubble():
         st.markdown(
             """
             <style>
-            div:has(> div > #av-chat-anchor) + div::before {
+            div[data-testid="stPopover"]::before {
                 content: "";
                 position: absolute;
                 inset: -10px;
@@ -711,7 +706,7 @@ def render_ai_assistant_bubble():
                 70% { transform: scale(1.55); opacity: 0; }
                 100% { transform: scale(1.55); opacity: 0; }
             }
-            div:has(> div > #av-chat-anchor) + div button::before {
+            div[data-testid="stPopover"] button::before {
                 content: "💬";
                 position: absolute;
                 top: -6px;
