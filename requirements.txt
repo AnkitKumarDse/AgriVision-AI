@@ -1,5 +1,8 @@
 streamlit
 pandas
-plotly
 numpy
+plotly
 scikit-learn
+xgboost
+joblib
+google-generativeai
