@@ -567,172 +567,140 @@ with tabs[2]:
 # ==========================================================
 # 🌾 YIELD PREDICTION
 # ==========================================================
-if predict_yield:
+# 4. Yield Prediction
+# ==========================================================
 
-    crop_encoded = crop_encoder.transform([crop])[0]
-    season_encoded = season_encoder.transform([season])[0]
-    state_encoded = state_encoder.transform([state])[0]
+yield_model = joblib.load("yield_model.pkl")
+crop_encoder = joblib.load("crop_encoder.pkl")
+season_encoder = joblib.load("season_encoder.pkl")
+state_encoder = joblib.load("state_encoder.pkl")
 
-    input_data = pd.DataFrame({
-        "Crop": [crop_encoded],
-        "Crop_Year": [crop_year],
-        "Season": [season_encoded],
-        "State": [state_encoded],
-        "Area": [area],
-        "Production": [production],
-        "Annual_Rainfall": [rainfall],
-        "Fertilizer": [fertilizer],
-        "Pesticide": [pesticide]
-    })
+with tabs[3]:
 
-    predicted_yield = float(yield_model.predict(input_data)[0])
+    with st.container(border=True):
 
-    total_output = predicted_yield * area
+        st.header("🌾 AI Yield Prediction")
 
-    st.success("✅ Yield Prediction Completed Successfully")
-
-    m1, m2, m3 = st.columns(3)
-
-    with m1:
-        st.metric(
-            "🌾 Predicted Yield",
-            f"{predicted_yield:.2f} t/ha"
+        st.caption(
+            "Predict expected crop yield using Machine Learning."
         )
 
-    with m2:
-        st.metric(
-            "📦 Estimated Production",
-            f"{total_output:.2f} Tonnes"
+        left, right = st.columns(2)
+
+        with left:
+
+            crop = st.selectbox(
+                "Crop",
+                [
+                    "Rice",
+                    "Wheat",
+                    "Maize",
+                    "Cotton",
+                    "Sugarcane",
+                    "Barley",
+                    "Millets",
+                    "Groundnut",
+                    "Soybean",
+                    "Potato",
+                    "Gram",
+                    "Turmeric",
+                ],
+            )
+
+            season = st.selectbox(
+                "Season",
+                [
+                    "Kharif",
+                    "Rabi",
+                    "Summer",
+                    "Whole Year",
+                    "Winter",
+                    "Autumn",
+                ],
+            )
+
+            state = st.text_input(
+                "State",
+                "Punjab",
+            )
+
+            crop_year = st.number_input(
+                "Crop Year",
+                1997,
+                2035,
+                2026,
+            )
+
+        with right:
+
+            area = st.number_input(
+                "Area (Hectares)",
+                value=5.0,
+            )
+
+            production = st.number_input(
+                "Production (Tonnes)",
+                value=20.0,
+            )
+
+            rainfall = st.number_input(
+                "Annual Rainfall (mm)",
+                value=800.0,
+            )
+
+            fertilizer = st.number_input(
+                "Fertilizer",
+                value=450.0,
+            )
+
+            pesticide = st.number_input(
+                "Pesticide",
+                value=8.0,
+            )
+
+        predict_yield = st.button(
+            "🚀 Predict Yield",
+            type="primary",
+            use_container_width=True,
         )
 
-    with m3:
+        if predict_yield:
 
-        if predicted_yield >= 5:
-            category = "Excellent 🟢"
+            crop_encoded = crop_encoder.transform([crop])[0]
+            season_encoded = season_encoder.transform([season])[0]
+            state_encoded = state_encoder.transform([state])[0]
 
-        elif predicted_yield >= 3:
-            category = "Average 🟡"
+            input_data = pd.DataFrame(
+                {
+                    "Crop": [crop_encoded],
+                    "Crop_Year": [crop_year],
+                    "Season": [season_encoded],
+                    "State": [state_encoded],
+                    "Area": [area],
+                    "Production": [production],
+                    "Annual_Rainfall": [rainfall],
+                    "Fertilizer": [fertilizer],
+                    "Pesticide": [pesticide],
+                }
+            )
 
-        else:
-            category = "Low 🔴"
+            predicted_yield = float(
+                yield_model.predict(input_data)[0]
+            )
 
-        st.metric(
-            "📈 Yield Category",
-            category
-        )
+            total_output = predicted_yield * area
 
-    st.divider()
+            st.success("✅ Yield Prediction Completed Successfully")
 
-    st.subheader("📊 Prediction Summary")
+            st.metric(
+                "🌾 Predicted Yield",
+                f"{predicted_yield:.2f} t/ha",
+            )
 
-left, right = st.columns(2)
-
-with left:
-
-    st.info(f"""
-**Crop:** {crop}
-
-**Season:** {season}
-
-**State:** {state}
-
-**Area:** {area:.2f} Hectares
-""")
-
-with right:
-
-    st.info(f"""
-**Predicted Yield:** {predicted_yield:.2f} Tonnes/Hectare
-
-**Expected Production:** {total_output:.2f} Tonnes
-""")
-
-st.divider()
-
-progress = min(predicted_yield / 8, 1)
-
-st.progress(progress)
-
-fig = go.Figure(
-    go.Indicator(
-        mode="gauge+number",
-        value=predicted_yield,
-        number={"suffix": " t/ha"},
-        title={"text": "Predicted Yield"},
-        gauge={
-            "axis": {"range": [0, 8]},
-            "bar": {"color": "green"},
-            "steps": [
-                {"range": [0, 2], "color": "#7f1d1d"},
-                {"range": [2, 4], "color": "#ca8a04"},
-                {"range": [4, 6], "color": "#16a34a"},
-                {"range": [6, 8], "color": "#14532d"},
-            ],
-        },
-    )
-)
-
-fig.update_layout(
-    height=350,
-    paper_bgcolor="rgba(0,0,0,0)",
-    font_color="white",
-)
-
-st.plotly_chart(fig, use_container_width=True)
-
-st.divider()
-
-st.subheader("🤖 AI Farming Insights")
-
-if predicted_yield >= 6:
-
-    st.success("""
-🌾 Excellent Yield Expected
-
-• Weather conditions appear favourable
-
-• Continue present farming practices
-
-• Maintain fertilizer schedule
-
-• High production expected
-""")
-
-elif predicted_yield >= 4:
-
-    st.info("""
-🌱 Good Yield Expected
-
-• Crop health looks good
-
-• Maintain irrigation
-
-• Monitor rainfall regularly
-""")
-
-elif predicted_yield >= 2:
-
-    st.warning("""
-⚠ Moderate Yield Expected
-
-• Improve nutrient management
-
-• Monitor pests
-
-• Optimize irrigation
-""")
-
-else:
-
-    st.error("""
-🚨 Low Yield Expected
-
-• Soil fertility may be low
-
-• Irrigation improvement recommended
-
-• Seek agricultural guidance
-""")
+            st.metric(
+                "📦 Estimated Production",
+                f"{total_output:.2f} Tonnes",
+            )
 # ----------------------------------------------------------------------
 # 5. Weather Dashboard
 # ----------------------------------------------------------------------
