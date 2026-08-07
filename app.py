@@ -667,7 +667,10 @@ with tabs[3]:
         if predict_yield:
 
             crop_encoded = crop_encoder.transform([crop])[0]
-            season_encoded = season_encoder.transform([season])[0]
+            st.write("Season selected:", repr(season))
+st.write("Encoder classes:", season_encoder.classes_)
+
+season_encoded = season_encoder.transform([season])[0]
             state_encoded = state_encoder.transform([state])[0]
 
             input_data = pd.DataFrame(
