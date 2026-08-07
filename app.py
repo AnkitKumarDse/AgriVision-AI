@@ -669,7 +669,9 @@ with tabs[3]:
             crop_encoded = crop_encoder.transform([crop])[0]
             st.write("Season selected:", repr(season))
             st.write("Encoder classes:", season_encoder.classes_)
-
+            st.write("Selected season:", repr(season))
+            st.write("Encoder classes:", season_encoder.classes_)
+            st.stop()
             season_encoded = season_encoder.transform([season])[0]
             state_encoded = state_encoder.transform([state])[0]
 
