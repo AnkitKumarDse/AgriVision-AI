@@ -569,58 +569,7 @@ with tabs[2]:
 # ----------------------------------------------------------------------
 # 4. Yield Prediction
 # ----------------------------------------------------------------------
-with tabs[3]:
-    with st.container(border=True):
-        st.header("Yield Prediction")
-        col1, col2 = st.columns(2)
-        with col1:
-            crop_type = st.text_input("Crop Type", value=st.session_state.profile.get("current_crop", "Wheat"))
-            land3 = st.slider("Total Land (hectares)", 0.0, 500.0, 5.0, key="land3")
-        with col2:
-            rainfall3 = st.slider("Rainfall (mm)", 0.0, 3000.0, 800.0, key="rain3")
-            temp3 = st.slider("Temperature (°C)", 0.0, 50.0, 27.0, key="temp3")
-        input_costs = st.slider("Input Costs (₹)", 0, 1000000, 20000, step=1000)
 
-        if st.button("Predict Yield", type="primary"):
-            inputs = {
-                "crop_type": crop_type,
-                "total_land_ha": land3,
-                "rainfall_mm": rainfall3,
-                "temperature_c": temp3,
-                "input_costs": input_costs,
-            }
-            with st.spinner("Estimating yield..."):
-                time.sleep(0.6)
-                st.session_state.yield_result = predict_yield(inputs)
-
-        result = st.session_state.yield_result
-        if result:
-            if result["demo"]:
-                st.warning("Showing a DEMO estimate -- not a real model prediction yet.")
-
-            c1, c2 = st.columns([1, 1.4])
-            c1.metric("Predicted Yield", f"{result['value']} tons/hectare")
-            with c2:
-                # simple 4-season projection band around the point estimate, same
-                # visual language as the income trend chart on Final Dashboard
-                seasons = ["This season", "+1", "+2", "+3"]
-                low = [result["value"] * f for f in (1.0, 0.9, 0.85, 0.8)]
-                high = [result["value"] * f for f in (1.0, 1.1, 1.15, 1.2)]
-                fig = go.Figure()
-                fig.add_trace(go.Scatter(x=seasons, y=high, line=dict(width=0), showlegend=False))
-                fig.add_trace(
-                    go.Scatter(
-                        x=seasons, y=low, fill="tonexty", line=dict(width=0),
-                        fillcolor="rgba(34,197,94,0.25)", showlegend=False,
-                    )
-                )
-                fig.add_trace(go.Scatter(x=seasons, y=[result["value"]] * 4, line=dict(color="#22c55e"), name="Point estimate"))
-                fig.update_layout(
-                    height=200, margin=dict(l=10, r=10, t=10, b=10),
-                    paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color="#e8f0ec",
-                    yaxis_title="tons/ha",
-                )
-                st.plotly_chart(fig, use_container_width=True)
 
 # ----------------------------------------------------------------------
 # 5. Weather Dashboard
