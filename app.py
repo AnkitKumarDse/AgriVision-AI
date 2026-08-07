@@ -609,8 +609,10 @@ with m3:
 
     if predicted_yield >= 5:
         category = "Excellent 🟢"
+
     elif predicted_yield >= 3:
         category = "Average 🟡"
+
     else:
         category = "Low 🔴"
 
@@ -618,6 +620,7 @@ with m3:
         "📈 Yield Category",
         category
     )
+
 st.divider()
 
 st.subheader("📊 Prediction Summary")
