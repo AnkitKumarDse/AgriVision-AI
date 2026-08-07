@@ -625,9 +625,10 @@ if predict_yield:
 
     st.subheader("📊 Prediction Summary")
 
-    left, right = st.columns(2)
+left, right = st.columns(2)
 
-    with left:
+with left:
+
     st.info(f"""
 **Crop:** {crop}
 
@@ -645,52 +646,40 @@ with right:
 
 **Expected Production:** {total_output:.2f} Tonnes
 """)
-  st.divider()
+
+st.divider()
 
 progress = min(predicted_yield / 8, 1)
 
 st.progress(progress)
 
-fig = go.Figure(go.Indicator(
-
-    mode="gauge+number",
-
-    value=predicted_yield,
-
-    number={"suffix": " t/ha"},
-
-    title={"text": "Predicted Yield"},
-
-    gauge={
-
-        "axis": {"range": [0,8]},
-
-        "bar": {"color":"green"},
-
-        "steps":[
-
-            {"range":[0,2],"color":"#7f1d1d"},
-            {"range":[2,4],"color":"#ca8a04"},
-            {"range":[4,6],"color":"#16a34a"},
-            {"range":[6,8],"color":"#14532d"}
-
-        ]
-
-    }
-
-))
+fig = go.Figure(
+    go.Indicator(
+        mode="gauge+number",
+        value=predicted_yield,
+        number={"suffix": " t/ha"},
+        title={"text": "Predicted Yield"},
+        gauge={
+            "axis": {"range": [0, 8]},
+            "bar": {"color": "green"},
+            "steps": [
+                {"range": [0, 2], "color": "#7f1d1d"},
+                {"range": [2, 4], "color": "#ca8a04"},
+                {"range": [4, 6], "color": "#16a34a"},
+                {"range": [6, 8], "color": "#14532d"},
+            ],
+        },
+    )
+)
 
 fig.update_layout(
-
     height=350,
-
     paper_bgcolor="rgba(0,0,0,0)",
-
-    font_color="white"
-
+    font_color="white",
 )
 
 st.plotly_chart(fig, use_container_width=True)
+
 st.divider()
 
 st.subheader("🤖 AI Farming Insights")
