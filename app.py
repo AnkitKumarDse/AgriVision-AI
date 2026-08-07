@@ -512,6 +512,8 @@ with tabs[2]:
             crop = label_encoder.inverse_transform(prediction)[0]
 
             confidence = np.max(crop_model.predict_proba(features)) * 100
+            st.session_state.recommended_crop = crop
+            st.session_state.crop_confidence = confidence
 
             st.success(f"🌾 Recommended Crop : **{crop.upper()}**")
 
@@ -698,7 +700,12 @@ with tabs[3]:
                 predicted_yield = float(yield_model.predict(input_data)[0])
 
                 total_output = predicted_yield * area
-
+                # ⭐ Save for Gemini
+                st.session_state.predicted_yield = predicted_yield
+                st.session_state.total_output = total_output
+                st.session_state.yield_crop = crop
+                st.session_state.yield_season = season
+                st.session_state.yield_state = state
                 st.success("✅ Yield Prediction Completed Successfully!")
 
                 m1, m2, m3 = st.columns(3)
@@ -1005,6 +1012,42 @@ with tabs[6]:
 # renders on top of whichever tab is open. Tapping it pops open a small
 # chat panel anchored to the bubble.
 # ----------------------------------------------------------------------
+import google.generativeai as genai
+
+genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
+
+gemini = genai.GenerativeModel("gemini-2.5-flash")
+def ai_assistant_reply(question, context):
+
+    prompt = f"""
+You are AgriVision AI.
+
+You are an expert agricultural advisor helping Indian farmers.
+
+Current Farmer Information
+
+{context}
+
+Farmer Question
+
+{question}
+
+Instructions:
+
+- Give practical farming advice.
+- Use simple English.
+- Answer in bullet points whenever possible.
+- If crop recommendation or yield prediction is available, use it.
+- If information is missing, clearly say so instead of guessing.
+- Keep the answer under 250 words.
+"""
+
+    try:
+        response = gemini.generate_content(prompt)
+        return response.text
+
+    except Exception as e:
+        return f"❌ Gemini Error:\n\n{e}"
 def render_ai_assistant_bubble():
     AVATARS = {"user": "🧑‍🌾", "assistant": "🌾"}
 
@@ -1104,13 +1147,43 @@ def render_ai_assistant_bubble():
         question = st.chat_input("Ask something...", key="floating_chat_input") or clicked
         if question:
             st.session_state.chat_history.append(("user", question))
-            p = st.session_state.profile
-            context = {"summary": f"{p.get('current_crop', 'a crop')} farmer with {p.get('total_land_ha', '?')} ha in {p.get('region', 'India')}"}
-            with st.spinner("AgriVision AI is thinking..."):
-                time.sleep(0.5)
-                reply = ai_assistant_reply(question, context)
-            st.session_state.chat_history.append(("assistant", reply))
-            st.rerun()
+p = st.session_state.profile
+
+context = f"""
+Farmer Profile
+
+Farmer ID : {p.get('farmer_id','')}
+
+Age : {p.get('age','')}
+
+State : {p.get('region','')}
+
+Land : {p.get('total_land_ha','')}
+
+Current Crop : {p.get('current_crop','')}
+
+Monthly Income : {p.get('monthly_income','')}
+"""
+
+# If Crop Recommendation exists
+if "recommended_crop" in st.session_state:
+    context += f"""
+
+Recommended Crop : {st.session_state.recommended_crop}
+
+Confidence : {st.session_state.get('crop_confidence','')}
+"""
+
+# If Yield Prediction exists
+if "predicted_yield" in st.session_state:
+    context += f"""
+
+Predicted Yield : {st.session_state.predicted_yield:.2f} t/ha
+
+Estimated Production : {st.session_state.total_output:.2f} tonnes
+"""
+
+reply = ai_assistant_reply(question, context)
 
 
 render_ai_assistant_bubble()
