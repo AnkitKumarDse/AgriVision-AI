@@ -1014,10 +1014,8 @@ with tabs[6]:
 # ----------------------------------------------------------------------
 import google.generativeai as genai
 
-# 1. Initialize API and Model
-genai.configure(
-    api_key=st.secrets["AQ.Ab8RN6LVCPUkeM2_521uT4AmbM6KGyW9xpIR6N1-QEF9ktG2Ew"]
-)
+# Pass the API key string directly
+genai.configure(api_key="AQ.Ab8RN6LVCPUkeM2_521uT4AmbM6KGyW9xpIR6N1-QEF9ktG2Ew")
 gemini = genai.GenerativeModel("gemini-2.5-flash")
 
 # 2. Ensure session state variables exist
