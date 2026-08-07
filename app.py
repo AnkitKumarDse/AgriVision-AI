@@ -604,8 +604,7 @@ with m2:
         "📦 Estimated Production",
         f"{total_output:.2f} Tonnes"
     )
-
-with m3:
+  with m3:
 
     if predicted_yield >= 5:
         category = "Excellent 🟢"
