@@ -1013,18 +1013,27 @@ with tabs[6]:
 # chat panel anchored to the bubble.
 # ----------------------------------------------------------------------
 import streamlit as st
-import requests
+from groq import Groq
 
-# 1. Ensure session state variables exist
+# 1. Initialize Groq Client securely from Streamlit Secrets
+try:
+    groq_client = Groq(api_key=st.secrets["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"])
+except Exception as e:
+    groq_client = None
+
+# 2. Ensure session state variables exist
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
 
-# Ensure FARMER_ICON_B64 is defined to prevent NameErrors
+# Safe check for base64 image string to avoid NameErrors
 FARMER_ICON_B64 = globals().get("FARMER_ICON_B64", None)
 
 
-# 2. Ollama AI Reply Function
+# 3. AI Assistant Reply Function (Groq + Llama 3)
 def ai_assistant_reply(question, context):
+    if not groq_client:
+        return "❌ Groq API Key missing! Please add `GROQ_API_KEY` in Streamlit App Settings -> Secrets."
+
     prompt = f"""
 You are AgriVision AI.
 You are an expert agricultural advisor helping Indian farmers.
@@ -1045,31 +1054,23 @@ Instructions:
 """
 
     try:
-        # Calls your local Ollama server
-        response = requests.post(
-            "http://localhost:11434/api/generate",
-            json={
-                "model": "llama3",  # Make sure you ran 'ollama run llama3' in terminal
-                "prompt": prompt,
-                "stream": False,
-            },
-            timeout=30,
+        completion = groq_client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.6,
+            max_tokens=400,
         )
+        return completion.choices[0].message.content
 
-        if response.status_code == 200:
-            return response.json()["response"]
-        else:
-            return f"❌ Ollama API Error: {response.status_code} - {response.text}"
-
-    except requests.exceptions.RequestException as e:
-        return f"❌ Connection Error: Could not connect to Ollama. Make sure the Ollama app is running on your computer.\n\nDetails: {e}"
+    except Exception as e:
+        return f"❌ Groq Error:\n\n{e}"
 
 
-# 3. Chatbot UI & Logic Function
+# 4. Chatbot Floating UI & Logic Function
 def render_ai_assistant_bubble():
     AVATARS = {"user": "🧑‍🌾", "assistant": "🌾"}
 
-    # Custom CSS for artwork
+    # Custom artwork CSS (if uploaded)
     if FARMER_ICON_B64:
         st.markdown(
             f"""
@@ -1090,7 +1091,7 @@ def render_ai_assistant_bubble():
             unsafe_allow_html=True,
         )
 
-    # Pulsing animation before first interaction
+    # Pulsing ring & bounce badge before first interaction
     if not st.session_state.chat_history:
         st.markdown(
             """
@@ -1134,7 +1135,7 @@ def render_ai_assistant_bubble():
             unsafe_allow_html=True,
         )
 
-    # Render Popover UI
+    # Popover UI Container
     with st.popover(
         "🧑‍🌾", use_container_width=False, help="Ask AgriVision AI"
     ):
@@ -1166,11 +1167,10 @@ def render_ai_assistant_bubble():
             or clicked
         )
 
-        # Handle message submission inside the popover
+        # Handle message interaction inside popover scope
         if question:
             p = st.session_state.get("profile", {})
 
-            # Build context dynamically
             context = f"""
 Farmer Profile:
 Farmer ID: {p.get('farmer_id', 'N/A')}
@@ -1187,15 +1187,16 @@ Monthly Income: {p.get('monthly_income', 'N/A')}
             if "predicted_yield" in st.session_state:
                 context += f"\nPredicted Yield: {st.session_state.predicted_yield:.2f} t/ha\nEstimated Production: {st.session_state.get('total_output', 0.0):.2f} tonnes"
 
-            # Save user prompt & fetch response
+            # Append user question
             st.session_state.chat_history.append(("user", question))
-            
-            # Show a temporary loading state while Ollama thinks
-            with st.spinner("Analyzing..."):
-                reply = ai_assistant_reply(question, context)
-                
+
+            # Fetch AI reply
+            reply = ai_assistant_reply(question, context)
+
+            # Append assistant response and refresh
             st.session_state.chat_history.append(("assistant", reply))
             st.rerun()
 
-# 4. Trigger the UI render
+
+# 5. Render the floating assistant button
 render_ai_assistant_bubble()
