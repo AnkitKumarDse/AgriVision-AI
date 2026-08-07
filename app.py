@@ -581,9 +581,7 @@ with tabs[3]:
 
         st.header("🌾 AI Yield Prediction")
 
-        st.caption(
-            "Predict expected crop yield using Machine Learning."
-        )
+        st.caption("Predict expected crop yield using Machine Learning.")
 
         left, right = st.columns(2)
 
@@ -664,82 +662,80 @@ with tabs[3]:
             use_container_width=True,
         )
 
-          
+        if predict_yield:
 
-       if predict_yield:
+            try:
 
-        try:
+                # Clean Inputs
+                crop = crop.strip()
+                season = season.strip()
+                state = state.strip()
 
-            # Clean Inputs
-            crop = crop.strip()
-            season = season.strip()
-            state = state.strip()
+                # Encode
+                crop_encoded = crop_encoder.transform([crop])[0]
 
-            # Encode
-            crop_encoded = crop_encoder.transform([crop])[0]
+                season_classes = [x.strip() for x in season_encoder.classes_]
+                season_encoded = season_classes.index(season)
 
-            season_classes = [x.strip() for x in season_encoder.classes_]
-            season_encoded = season_classes.index(season)
+                state_classes = [x.strip() for x in state_encoder.classes_]
+                state_encoded = state_classes.index(state)
 
-            state_classes = [x.strip() for x in state_encoder.classes_]
-            state_encoded = state_classes.index(state)
-
-            # Model Input
-            input_data = pd.DataFrame({
-                "Crop": [crop_encoded],
-                "Crop_Year": [crop_year],
-                "Season": [season_encoded],
-                "State": [state_encoded],
-                "Area": [area],
-                "Production": [production],
-                "Annual_Rainfall": [rainfall],
-                "Fertilizer": [fertilizer],
-                "Pesticide": [pesticide],
-            })
-
-            predicted_yield = float(
-                yield_model.predict(input_data)[0]
-            )
-
-            total_output = predicted_yield * area
-
-            st.success("✅ Yield Prediction Completed Successfully!")
-
-            m1, m2, m3 = st.columns(3)
-
-            with m1:
-                st.metric(
-                    "🌾 Predicted Yield",
-                    f"{predicted_yield:.2f} t/ha",
+                # Model Input
+                input_data = pd.DataFrame(
+                    {
+                        "Crop": [crop_encoded],
+                        "Crop_Year": [crop_year],
+                        "Season": [season_encoded],
+                        "State": [state_encoded],
+                        "Area": [area],
+                        "Production": [production],
+                        "Annual_Rainfall": [rainfall],
+                        "Fertilizer": [fertilizer],
+                        "Pesticide": [pesticide],
+                    }
                 )
 
-            with m2:
-                st.metric(
-                    "📦 Estimated Production",
-                    f"{total_output:.2f} Tonnes",
-                )
+                predicted_yield = float(yield_model.predict(input_data)[0])
 
-            with m3:
+                total_output = predicted_yield * area
 
-                if predicted_yield >= 5:
-                    category = "Excellent 🟢"
-                elif predicted_yield >= 3:
-                    category = "Average 🟡"
-                else:
-                    category = "Low 🔴"
+                st.success("✅ Yield Prediction Completed Successfully!")
 
-                st.metric(
-                    "Yield Category",
-                    category,
-                )
+                m1, m2, m3 = st.columns(3)
 
-            st.divider()
+                with m1:
+                    st.metric(
+                        "🌾 Predicted Yield",
+                        f"{predicted_yield:.2f} t/ha",
+                    )
 
-            left2, right2 = st.columns(2)
+                with m2:
+                    st.metric(
+                        "📦 Estimated Production",
+                        f"{total_output:.2f} Tonnes",
+                    )
 
-            with left2:
+                with m3:
 
-                st.info(f"""
+                    if predicted_yield >= 5:
+                        category = "Excellent 🟢"
+                    elif predicted_yield >= 3:
+                        category = "Average 🟡"
+                    else:
+                        category = "Low 🔴"
+
+                    st.metric(
+                        "Yield Category",
+                        category,
+                    )
+
+                st.divider()
+
+                left2, right2 = st.columns(2)
+
+                with left2:
+
+                    st.info(f"""
 **Crop:** {crop}
 
 **Season:** {season}
@@ -749,21 +745,21 @@ with tabs[3]:
 **Area:** {area:.2f} Hectares
 """)
 
-            with right2:
+                with right2:
 
-                st.info(f"""
+                    st.info(f"""
 **Predicted Yield:** {predicted_yield:.2f} t/ha
 
 **Estimated Production:** {total_output:.2f} Tonnes
 """)
 
-            st.progress(min(predicted_yield / 8, 1.0))
+                st.progress(min(predicted_yield / 8, 1.0))
 
-        except Exception as e:
+            except Exception as e:
 
-            st.error("Prediction Failed")
+                st.error("Prediction Failed")
 
-            st.exception(e)
+                st.exception(e)
 # ----------------------------------------------------------------------
 # 5. Weather Dashboard
 # ----------------------------------------------------------------------
