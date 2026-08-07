@@ -566,6 +566,13 @@ with tabs[2]:
 # ----------------------------------------------------------------------
 # 5. Weather Dashboard
 # ----------------------------------------------------------------------
+import streamlit as st
+import pandas as pd
+import numpy as np
+import plotly.graph_objects as go
+import requests
+import time
+import joblib
 API_KEY = "fc99d46057bc6a25799d7a0577685b63"
 
 def get_weather(city):
