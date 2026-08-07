@@ -413,8 +413,8 @@ with tabs[1]:
 import joblib
 import numpy as np
 
-crop_model = joblib.load("models/crop_model.pkl")
-label_encoder = joblib.load("models/label_encoder.pkl")
+crop_model = joblib.load("crop_model.pkl")
+label_encoder = joblib.load("label_encoder.pkl")
 with tabs[2]:
 
     with st.container(border=True):
