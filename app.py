@@ -568,36 +568,28 @@ with tabs[2]:
 # 🌾 YIELD PREDICTION
 # ==========================================================
 if predict_yield:
-  try:
 
-    # Encode categorical variables
     crop_encoded = crop_encoder.transform([crop])[0]
     season_encoded = season_encoder.transform([season])[0]
     state_encoded = state_encoder.transform([state])[0]
 
-    # Create input dataframe
     input_data = pd.DataFrame({
-        "Crop": [crop_encoded],
-        "Crop_Year": [crop_year],
-        "Season": [season_encoded],
-        "State": [state_encoded],
-        "Area": [area],
-        "Production": [production],
-        "Annual_Rainfall": [rainfall],
-        "Fertilizer": [fertilizer],
-        "Pesticide": [pesticide]
+        "Crop":[crop_encoded],
+        "Crop_Year":[crop_year],
+        "Season":[season_encoded],
+        "State":[state_encoded],
+        "Area":[area],
+        "Production":[production],
+        "Annual_Rainfall":[rainfall],
+        "Fertilizer":[fertilizer],
+        "Pesticide":[pesticide]
     })
 
-    # Prediction
     predicted_yield = float(yield_model.predict(input_data)[0])
 
     total_output = predicted_yield * area
 
-except Exception as e:
-
-    st.error(f"Prediction Failed\n\n{e}")
-    st.stop()
-st.success("✅ Yield Prediction Completed Successfully")
+    st.success("✅ Yield Prediction Completed Successfully")
 
 m1, m2, m3 = st.columns(3)
 
