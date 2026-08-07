@@ -567,7 +567,189 @@ with tabs[2]:
 # ==========================================================
 # 🌾 YIELD PREDICTION
 # ==========================================================
+if predict_yield:
+  try:
 
+    # Encode categorical variables
+    crop_encoded = crop_encoder.transform([crop])[0]
+    season_encoded = season_encoder.transform([season])[0]
+    state_encoded = state_encoder.transform([state])[0]
+
+    # Create input dataframe
+    input_data = pd.DataFrame({
+        "Crop": [crop_encoded],
+        "Crop_Year": [crop_year],
+        "Season": [season_encoded],
+        "State": [state_encoded],
+        "Area": [area],
+        "Production": [production],
+        "Annual_Rainfall": [rainfall],
+        "Fertilizer": [fertilizer],
+        "Pesticide": [pesticide]
+    })
+
+    # Prediction
+    predicted_yield = float(yield_model.predict(input_data)[0])
+
+    total_output = predicted_yield * area
+
+except Exception as e:
+
+    st.error(f"Prediction Failed\n\n{e}")
+    st.stop()
+st.success("✅ Yield Prediction Completed Successfully")
+
+m1, m2, m3 = st.columns(3)
+
+with m1:
+    st.metric(
+        "🌾 Predicted Yield",
+        f"{predicted_yield:.2f} t/ha"
+    )
+
+with m2:
+    st.metric(
+        "📦 Estimated Production",
+        f"{total_output:.2f} Tonnes"
+    )
+
+with m3:
+
+    if predicted_yield >= 5:
+        category = "Excellent 🟢"
+    elif predicted_yield >= 3:
+        category = "Average 🟡"
+    else:
+        category = "Low 🔴"
+
+    st.metric(
+        "📈 Yield Category",
+        category
+    )
+  st.divider()
+
+st.subheader("📊 Prediction Summary")
+
+left, right = st.columns(2)
+
+with left:
+
+    st.info(f"""
+**Crop:** {crop}
+
+**Season:** {season}
+
+**State:** {state}
+
+**Area:** {area:.2f} Hectares
+""")
+
+with right:
+
+    st.info(f"""
+**Predicted Yield:** {predicted_yield:.2f} Tonnes/Hectare
+
+**Expected Production:** {total_output:.2f} Tonnes
+""")
+  st.divider()
+
+progress = min(predicted_yield / 8, 1)
+
+st.progress(progress)
+
+fig = go.Figure(go.Indicator(
+
+    mode="gauge+number",
+
+    value=predicted_yield,
+
+    number={"suffix": " t/ha"},
+
+    title={"text": "Predicted Yield"},
+
+    gauge={
+
+        "axis": {"range": [0,8]},
+
+        "bar": {"color":"green"},
+
+        "steps":[
+
+            {"range":[0,2],"color":"#7f1d1d"},
+            {"range":[2,4],"color":"#ca8a04"},
+            {"range":[4,6],"color":"#16a34a"},
+            {"range":[6,8],"color":"#14532d"}
+
+        ]
+
+    }
+
+))
+
+fig.update_layout(
+
+    height=350,
+
+    paper_bgcolor="rgba(0,0,0,0)",
+
+    font_color="white"
+
+)
+
+st.plotly_chart(fig, use_container_width=True)
+st.divider()
+
+st.subheader("🤖 AI Farming Insights")
+
+if predicted_yield >= 6:
+
+    st.success("""
+🌾 Excellent Yield Expected
+
+• Weather conditions appear favourable
+
+• Continue present farming practices
+
+• Maintain fertilizer schedule
+
+• High production expected
+""")
+
+elif predicted_yield >= 4:
+
+    st.info("""
+🌱 Good Yield Expected
+
+• Crop health looks good
+
+• Maintain irrigation
+
+• Monitor rainfall regularly
+""")
+
+elif predicted_yield >= 2:
+
+    st.warning("""
+⚠ Moderate Yield Expected
+
+• Improve nutrient management
+
+• Monitor pests
+
+• Optimize irrigation
+""")
+
+else:
+
+    st.error("""
+🚨 Low Yield Expected
+
+• Soil fertility may be low
+
+• Irrigation improvement recommended
+
+• Seek agricultural guidance
+""")
 # ----------------------------------------------------------------------
 # 5. Weather Dashboard
 # ----------------------------------------------------------------------
