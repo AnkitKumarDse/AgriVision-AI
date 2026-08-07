@@ -666,14 +666,22 @@ with tabs[3]:
 
         if predict_yield:
 
+            st.write("Crop:", repr(crop))
+            st.write("Season:", repr(season))
+            st.write("State:", repr(state))
+
+            st.write("Crop classes:", crop_encoder.classes_)
+            st.write("Season classes:", season_encoder.classes_)
+            st.write("State classes:", state_encoder.classes_)
+
             crop_encoded = crop_encoder.transform([crop])[0]
-            st.write("Season selected:", repr(season))
-            st.write("Encoder classes:", season_encoder.classes_)
-            st.write("Selected season:", repr(season))
-            st.write("Encoder classes:", season_encoder.classes_)
-            st.stop()
+            st.success("Crop encoded")
+
             season_encoded = season_encoder.transform([season])[0]
+            st.success("Season encoded")
+
             state_encoded = state_encoder.transform([state])[0]
+            st.success("State encoded")
 
             input_data = pd.DataFrame(
                 {
