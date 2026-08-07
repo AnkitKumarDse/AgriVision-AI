@@ -1014,26 +1014,32 @@ with tabs[6]:
 # ----------------------------------------------------------------------
 import google.generativeai as genai
 
-genai.configure(api_key=st.secrets["GEMINI_API_KEY"])
-
+# 1. Initialize API and Model
+genai.configure(
+    api_key=st.secrets["AQ.Ab8RN6LVCPUkeM2_521uT4AmbM6KGyW9xpIR6N1-QEF9ktG2Ew"]
+)
 gemini = genai.GenerativeModel("gemini-2.5-flash")
-def ai_assistant_reply(question, context):
 
+# 2. Ensure session state variables exist
+if "chat_history" not in st.session_state:
+    st.session_state.chat_history = []
+
+# Ensure FARMER_ICON_B64 is defined so it won't throw a NameError
+FARMER_ICON_B64 = globals().get("FARMER_ICON_B64", None)
+
+
+def ai_assistant_reply(question, context):
     prompt = f"""
 You are AgriVision AI.
-
 You are an expert agricultural advisor helping Indian farmers.
 
-Current Farmer Information
-
+Current Farmer Information:
 {context}
 
-Farmer Question
-
+Farmer Question:
 {question}
 
 Instructions:
-
 - Give practical farming advice.
 - Use simple English.
 - Answer in bullet points whenever possible.
@@ -1041,20 +1047,17 @@ Instructions:
 - If information is missing, clearly say so instead of guessing.
 - Keep the answer under 250 words.
 """
-
     try:
         response = gemini.generate_content(prompt)
         return response.text
-
     except Exception as e:
         return f"❌ Gemini Error:\n\n{e}"
+
+
 def render_ai_assistant_bubble():
     AVATARS = {"user": "🧑‍🌾", "assistant": "🌾"}
 
-    # Swap the plain emoji for the uploaded farmer artwork, if it's been
-    # committed to assets/farmer_icon.png. This is a separate, small CSS
-    # block (rather than folding it into the big static block above)
-    # because it needs the base64 string computed at runtime.
+    # Custom CSS for custom artwork if available
     if FARMER_ICON_B64:
         st.markdown(
             f"""
@@ -1075,8 +1078,7 @@ def render_ai_assistant_bubble():
             unsafe_allow_html=True,
         )
 
-    # Draw a bit of extra attention (pulsing ring + bouncing badge) until
-    # the user's actually chatted with it at least once.
+    # Pulsing animation before first interaction
     if not st.session_state.chat_history:
         st.markdown(
             """
@@ -1120,10 +1122,16 @@ def render_ai_assistant_bubble():
             unsafe_allow_html=True,
         )
 
-    with st.popover("🧑‍🌾", use_container_width=False, help="Ask AgriVision AI"):
+    # Render Popover UI
+    with st.popover(
+        "🧑‍🌾", use_container_width=False, help="Ask AgriVision AI"
+    ):
         st.markdown("**🌾 AgriVision Assistant**")
-        st.caption("Ask about your predicted income, crop choices, or general farming advice.")
+        st.caption(
+            "Ask about your predicted income, crop choices, or general farming advice."
+        )
 
+        clicked = None
         if not st.session_state.chat_history:
             st.markdown("**Try asking:**")
             suggestions = [
@@ -1131,12 +1139,9 @@ def render_ai_assistant_bubble():
                 "What crop suits my land best?",
                 "Is this a good time to sell?",
             ]
-            clicked = None
             for s in suggestions:
                 if st.button(s, use_container_width=True, key=f"chip_{s}"):
                     clicked = s
-        else:
-            clicked = None
 
         chat_box = st.container(height=280)
         with chat_box:
@@ -1144,46 +1149,37 @@ def render_ai_assistant_bubble():
                 with st.chat_message(role, avatar=AVATARS.get(role)):
                     st.write(msg)
 
-        question = st.chat_input("Ask something...", key="floating_chat_input") or clicked
+        question = (
+            st.chat_input("Ask something...", key="floating_chat_input")
+            or clicked
+        )
+
+        # Handle message submission inside the popover context
         if question:
+            p = st.session_state.get("profile", {})
+
+            context = f"""
+Farmer Profile:
+Farmer ID: {p.get('farmer_id', 'N/A')}
+Age: {p.get('age', 'N/A')}
+State: {p.get('region', 'N/A')}
+Land: {p.get('total_land_ha', 'N/A')}
+Current Crop: {p.get('current_crop', 'N/A')}
+Monthly Income: {p.get('monthly_income', 'N/A')}
+"""
+
+            if "recommended_crop" in st.session_state:
+                context += f"\nRecommended Crop: {st.session_state.recommended_crop}\nConfidence: {st.session_state.get('crop_confidence', '')}"
+
+            if "predicted_yield" in st.session_state:
+                context += f"\nPredicted Yield: {st.session_state.predicted_yield:.2f} t/ha\nEstimated Production: {st.session_state.get('total_output', 0.0):.2f} tonnes"
+
+            # Save user prompt & fetch response
             st.session_state.chat_history.append(("user", question))
-p = st.session_state.profile
-
-context = f"""
-Farmer Profile
-
-Farmer ID : {p.get('farmer_id','')}
-
-Age : {p.get('age','')}
-
-State : {p.get('region','')}
-
-Land : {p.get('total_land_ha','')}
-
-Current Crop : {p.get('current_crop','')}
-
-Monthly Income : {p.get('monthly_income','')}
-"""
-
-# If Crop Recommendation exists
-if "recommended_crop" in st.session_state:
-    context += f"""
-
-Recommended Crop : {st.session_state.recommended_crop}
-
-Confidence : {st.session_state.get('crop_confidence','')}
-"""
-
-# If Yield Prediction exists
-if "predicted_yield" in st.session_state:
-    context += f"""
-
-Predicted Yield : {st.session_state.predicted_yield:.2f} t/ha
-
-Estimated Production : {st.session_state.total_output:.2f} tonnes
-"""
-
-reply = ai_assistant_reply(question, context)
+            reply = ai_assistant_reply(question, context)
+            st.session_state.chat_history.append(("assistant", reply))
+            st.rerun()
 
 
+# 3. Call the popover function to display the icon on screen
 render_ai_assistant_bubble()
