@@ -664,90 +664,82 @@ with tabs[3]:
             use_container_width=True,
         )
 
-        if predict_yield:
+          
 
-    try:
+       if predict_yield:
 
-        # -----------------------------
-        # Clean Inputs
-        # -----------------------------
-        crop = crop.strip()
-        season = season.strip()
-        state = state.strip()
+        try:
 
-        # -----------------------------
-        # Safe Encoding
-        # -----------------------------
+            # Clean Inputs
+            crop = crop.strip()
+            season = season.strip()
+            state = state.strip()
 
-        crop_encoded = crop_encoder.transform([crop])[0]
+            # Encode
+            crop_encoded = crop_encoder.transform([crop])[0]
 
-        season_classes = [x.strip() for x in season_encoder.classes_]
-        season_index = season_classes.index(season)
-        season_encoded = season_index
+            season_classes = [x.strip() for x in season_encoder.classes_]
+            season_encoded = season_classes.index(season)
 
-        state_classes = [x.strip() for x in state_encoder.classes_]
-        state_index = state_classes.index(state)
-        state_encoded = state_index
+            state_classes = [x.strip() for x in state_encoder.classes_]
+            state_encoded = state_classes.index(state)
 
-        # -----------------------------
-        # Model Input
-        # -----------------------------
+            # Model Input
+            input_data = pd.DataFrame({
+                "Crop": [crop_encoded],
+                "Crop_Year": [crop_year],
+                "Season": [season_encoded],
+                "State": [state_encoded],
+                "Area": [area],
+                "Production": [production],
+                "Annual_Rainfall": [rainfall],
+                "Fertilizer": [fertilizer],
+                "Pesticide": [pesticide],
+            })
 
-        input_data = pd.DataFrame({
-            "Crop":[crop_encoded],
-            "Crop_Year":[crop_year],
-            "Season":[season_encoded],
-            "State":[state_encoded],
-            "Area":[area],
-            "Production":[production],
-            "Annual_Rainfall":[rainfall],
-            "Fertilizer":[fertilizer],
-            "Pesticide":[pesticide]
-        })
-
-        predicted_yield = float(
-            yield_model.predict(input_data)[0]
-        )
-
-        total_output = predicted_yield * area
-
-        st.success("🌾 Yield Prediction Completed Successfully!")
-
-        m1, m2, m3 = st.columns(3)
-
-        with m1:
-            st.metric(
-                "🌾 Predicted Yield",
-                f"{predicted_yield:.2f} t/ha"
+            predicted_yield = float(
+                yield_model.predict(input_data)[0]
             )
 
-        with m2:
-            st.metric(
-                "📦 Estimated Production",
-                f"{total_output:.2f} Tonnes"
-            )
+            total_output = predicted_yield * area
 
-        with m3:
+            st.success("✅ Yield Prediction Completed Successfully!")
 
-            if predicted_yield >= 5:
-                category = "Excellent 🟢"
-            elif predicted_yield >= 3:
-                category = "Average 🟡"
-            else:
-                category = "Low 🔴"
+            m1, m2, m3 = st.columns(3)
 
-            st.metric(
-                "Yield Category",
-                category
-            )
+            with m1:
+                st.metric(
+                    "🌾 Predicted Yield",
+                    f"{predicted_yield:.2f} t/ha",
+                )
 
-        st.divider()
+            with m2:
+                st.metric(
+                    "📦 Estimated Production",
+                    f"{total_output:.2f} Tonnes",
+                )
 
-        left,right = st.columns(2)
+            with m3:
 
-        with left:
+                if predicted_yield >= 5:
+                    category = "Excellent 🟢"
+                elif predicted_yield >= 3:
+                    category = "Average 🟡"
+                else:
+                    category = "Low 🔴"
 
-            st.info(f"""
+                st.metric(
+                    "Yield Category",
+                    category,
+                )
+
+            st.divider()
+
+            left2, right2 = st.columns(2)
+
+            with left2:
+
+                st.info(f"""
 **Crop:** {crop}
 
 **Season:** {season}
@@ -757,27 +749,21 @@ with tabs[3]:
 **Area:** {area:.2f} Hectares
 """)
 
-        with right:
+            with right2:
 
-            st.info(f"""
+                st.info(f"""
 **Predicted Yield:** {predicted_yield:.2f} t/ha
 
 **Estimated Production:** {total_output:.2f} Tonnes
 """)
 
-        st.progress(min(predicted_yield/8,1.0))
+            st.progress(min(predicted_yield / 8, 1.0))
 
-    except Exception as e:
+        except Exception as e:
 
-        st.error(f"Prediction Failed\n\n{e}")
+            st.error("Prediction Failed")
 
-        st.write("Crop:",crop)
-        st.write("Season:",season)
-        st.write("State:",state)
-
-        st.write("Crop Classes:",crop_encoder.classes_)
-        st.write("Season Classes:",season_encoder.classes_)
-        st.write("State Classes:",state_encoder.classes_)
+            st.exception(e)
 # ----------------------------------------------------------------------
 # 5. Weather Dashboard
 # ----------------------------------------------------------------------
