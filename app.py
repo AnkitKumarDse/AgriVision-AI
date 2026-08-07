@@ -566,25 +566,129 @@ with tabs[2]:
 # ----------------------------------------------------------------------
 # 5. Weather Dashboard
 # ----------------------------------------------------------------------
+API_KEY = "fc99d46057bc6a25799d7a0577685b63"
+
+def get_weather(city):
+
+    url = (
+        f"https://api.openweathermap.org/data/2.5/weather"
+        f"?q={city},IN"
+        f"&appid={API_KEY}"
+        f"&units=metric"
+    )
+
+    response = requests.get(url)
+
+    if response.status_code != 200:
+        return None
+
+    data = response.json()
+
+    return {
+        "temperature": data["main"]["temp"],
+        "humidity": data["main"]["humidity"],
+        "pressure": data["main"]["pressure"],
+        "wind": data["wind"]["speed"],
+        "condition": data["weather"][0]["main"],
+        "description": data["weather"][0]["description"],
+        "icon": data["weather"][0]["icon"],
+        "city": data["name"]
+    }
 with tabs[4]:
+
     with st.container(border=True):
-        st.header("Weather Dashboard")
-        st.info(
-            "Placeholder. Wire this up to a real weather API (e.g. Open-Meteo, IMD, or "
-            "OpenWeatherMap) once you decide on a source -- pass the farmer's region from "
-            "the profile tab as the query location."
+
+        st.header("🌦 Weather Intelligence Dashboard")
+
+        p = st.session_state.profile
+
+        city = st.text_input(
+            "Enter City",
+            value=p.get("region", "Patna")
         )
-        demo_days = pd.date_range("2026-08-06", periods=7)
-        demo_weather = pd.DataFrame(
-            {
-                "Date": demo_days,
-                "Temp (°C)": [30, 31, 29, 28, 32, 33, 30],
-                "Rainfall (mm)": [5, 0, 12, 20, 0, 0, 8],
-            }
-        )
-        st.dataframe(demo_weather, use_container_width=True)
-        st.line_chart(demo_weather.set_index("Date")[["Temp (°C)"]])
-        st.bar_chart(demo_weather.set_index("Date")[["Rainfall (mm)"]])
+
+        if st.button("Get Live Weather"):
+
+            weather = get_weather(city)
+
+            if weather is None:
+
+                st.error("Unable to fetch weather.")
+
+            else:
+
+                st.success(f"Live Weather • {weather['city']}")
+
+                c1, c2, c3, c4 = st.columns(4)
+
+                with c1:
+                    st.metric(
+                        "🌡 Temperature",
+                        f"{weather['temperature']} °C"
+                    )
+
+                with c2:
+                    st.metric(
+                        "💧 Humidity",
+                        f"{weather['humidity']}%"
+                    )
+
+                with c3:
+                    st.metric(
+                        "🌬 Wind",
+                        f"{weather['wind']} m/s"
+                    )
+
+                with c4:
+                    st.metric(
+                        "🧭 Pressure",
+                        f"{weather['pressure']} hPa"
+                    )
+
+                st.divider()
+
+                col1, col2 = st.columns([1,3])
+
+                with col1:
+
+                    st.image(
+                        f"https://openweathermap.org/img/wn/{weather['icon']}@2x.png",
+                        width=100
+                    )
+
+                with col2:
+
+                    st.subheader(weather["condition"])
+
+                    st.write(weather["description"].title())
+
+                st.divider()
+
+                st.subheader("🌾 AI Farming Advisory")
+
+                if weather["temperature"] > 35:
+
+                    st.warning(
+                        "High temperature detected. Increase irrigation frequency."
+                    )
+
+                elif weather["humidity"] > 85:
+
+                    st.warning(
+                        "Very high humidity. Monitor crops for fungal diseases."
+                    )
+
+                elif weather["condition"] == "Rain":
+
+                    st.info(
+                        "Rain expected. Avoid irrigation and fertilizer application today."
+                    )
+
+                else:
+
+                    st.success(
+                        "Weather conditions are favourable for normal farming operations."
+                    )
 
 # ----------------------------------------------------------------------
 # 6. Reports
