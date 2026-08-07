@@ -666,7 +666,7 @@ with tabs[3]:
 
         if predict_yield:
 
-    try:
+            try:
 
         # -----------------------------
         # Clean Inputs
