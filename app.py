@@ -1012,20 +1012,18 @@ with tabs[6]:
 # renders on top of whichever tab is open. Tapping it pops open a small
 # chat panel anchored to the bubble.
 # ----------------------------------------------------------------------
-import google.generativeai as genai
+import streamlit as st
+import requests
 
-# Pass the API key string directly
-genai.configure(api_key="AQ.Ab8RN6LVCPUkeM2_521uT4AmbM6KGyW9xpIR6N1-QEF9ktG2Ew")
-gemini = genai.GenerativeModel("gemini-2.5-flash")
-
-# 2. Ensure session state variables exist
+# 1. Ensure session state variables exist
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
 
-# Ensure FARMER_ICON_B64 is defined so it won't throw a NameError
+# Ensure FARMER_ICON_B64 is defined to prevent NameErrors
 FARMER_ICON_B64 = globals().get("FARMER_ICON_B64", None)
 
 
+# 2. Ollama AI Reply Function
 def ai_assistant_reply(question, context):
     prompt = f"""
 You are AgriVision AI.
@@ -1045,17 +1043,33 @@ Instructions:
 - If information is missing, clearly say so instead of guessing.
 - Keep the answer under 250 words.
 """
+
     try:
-        response = gemini.generate_content(prompt)
-        return response.text
-    except Exception as e:
-        return f"❌ Gemini Error:\n\n{e}"
+        # Calls your local Ollama server
+        response = requests.post(
+            "http://localhost:11434/api/generate",
+            json={
+                "model": "llama3",  # Make sure you ran 'ollama run llama3' in terminal
+                "prompt": prompt,
+                "stream": False,
+            },
+            timeout=30,
+        )
+
+        if response.status_code == 200:
+            return response.json()["response"]
+        else:
+            return f"❌ Ollama API Error: {response.status_code} - {response.text}"
+
+    except requests.exceptions.RequestException as e:
+        return f"❌ Connection Error: Could not connect to Ollama. Make sure the Ollama app is running on your computer.\n\nDetails: {e}"
 
 
+# 3. Chatbot UI & Logic Function
 def render_ai_assistant_bubble():
     AVATARS = {"user": "🧑‍🌾", "assistant": "🌾"}
 
-    # Custom CSS for custom artwork if available
+    # Custom CSS for artwork
     if FARMER_ICON_B64:
         st.markdown(
             f"""
@@ -1152,10 +1166,11 @@ def render_ai_assistant_bubble():
             or clicked
         )
 
-        # Handle message submission inside the popover context
+        # Handle message submission inside the popover
         if question:
             p = st.session_state.get("profile", {})
 
+            # Build context dynamically
             context = f"""
 Farmer Profile:
 Farmer ID: {p.get('farmer_id', 'N/A')}
@@ -1174,10 +1189,13 @@ Monthly Income: {p.get('monthly_income', 'N/A')}
 
             # Save user prompt & fetch response
             st.session_state.chat_history.append(("user", question))
-            reply = ai_assistant_reply(question, context)
+            
+            # Show a temporary loading state while Ollama thinks
+            with st.spinner("Analyzing..."):
+                reply = ai_assistant_reply(question, context)
+                
             st.session_state.chat_history.append(("assistant", reply))
             st.rerun()
 
-
-# 3. Call the popover function to display the icon on screen
+# 4. Trigger the UI render
 render_ai_assistant_bubble()
