@@ -567,7 +567,7 @@ with tabs[2]:
 # ==========================================================
 # 🌾 YIELD PREDICTION
 # ==========================================================
-
+yield_model = joblib.load("models/yield_model.pkl")
 with tabs[3]:
 
     with st.container(border=True):
