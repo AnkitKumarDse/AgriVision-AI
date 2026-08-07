@@ -3,31 +3,25 @@ AgriVision AI -- Streamlit frontend shell
 Run with:  streamlit run app.py
 
 This is the FRONTEND ONLY. All predictions currently run in DEMO MODE
-until real model files are added, so every screen stays clickable
-while the model team finishes training.
+(see utils.py) using transparent placeholder formulas so every screen is
+fully clickable while the model team finishes training. Once a teammate
+drops a .pkl into /models matching the contract documented at the top of
+utils.py, the relevant tab switches from demo to real predictions
+automatically -- no changes needed here.
 
-FIXED IN THIS VERSION:
-- crop_model.pkl / label_encoder.pkl are no longer loaded unconditionally
-  at startup (that was crashing the whole app on deploy if the files
-  weren't in the repo yet). They're now loaded safely, with a clear
-  "model not added yet" message if missing.
-- The OpenWeatherMap API key is no longer hardcoded in the file --
-  it now reads from Streamlit secrets (OPENWEATHER_API_KEY). See the
-  note near the top of the Weather tab for how to set that.
-- Restored the Yield Prediction tab (tab index 3 existed in the tab
-  list but had no content -- it would have shown as a blank tab).
-- Removed duplicate imports that were scattered mid-file.
+CHANGE LOG (this version):
+- The AI Assistant is no longer a tab. It now lives as a floating
+  "farmer" chat bubble (bottom-right corner) that's available on every
+  tab, so the user never has to leave what they're doing to ask it
+  something. See `render_ai_assistant_bubble()` near the bottom.
 """
 
 import base64
 import time
 from pathlib import Path
 
-import joblib
-import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
-import requests
 import streamlit as st
 
 from utils import ai_assistant_reply, model_status, predict_income, predict_yield, recommend_crops
@@ -36,6 +30,13 @@ st.set_page_config(page_title="AgriVision AI", page_icon="🌾", layout="wide")
 
 
 def _load_farmer_icon_b64():
+    """
+    Loads assets/farmer_icon.png (next to this file) and returns it as a
+    base64 string so it can be embedded straight into CSS as a
+    background-image -- no separate image hosting needed.
+    Falls back to None (and the bubble falls back to an emoji) if the
+    file isn't there, e.g. it wasn't committed to the repo.
+    """
     icon_path = Path(__file__).parent / "assets" / "farmer_icon.png"
     if icon_path.exists():
         return base64.b64encode(icon_path.read_bytes()).decode()
@@ -44,29 +45,10 @@ def _load_farmer_icon_b64():
 
 FARMER_ICON_B64 = _load_farmer_icon_b64()
 
-
-@st.cache_resource
-def load_crop_model():
-    """Safely load crop_model.pkl + label_encoder.pkl if a teammate has
-    added them next to this file. Returns (None, None) if missing or
-    broken, instead of crashing the whole app."""
-    base = Path(__file__).parent
-    model_path = base / "crop_model.pkl"
-    encoder_path = base / "label_encoder.pkl"
-    if model_path.exists() and encoder_path.exists():
-        try:
-            return joblib.load(model_path), joblib.load(encoder_path)
-        except Exception as e:  # noqa: BLE001
-            st.session_state["_crop_model_error"] = str(e)
-            return None, None
-    return None, None
-
-
-crop_model, label_encoder = load_crop_model()
-
 # ----------------------------------------------------------------------
 # Custom styling -- hero banner, card containers, tab spacing, and the
 # floating AI-assistant chat bubble.
+# Colors/theme (dark + green) live in .streamlit/config.toml.
 # ----------------------------------------------------------------------
 st.markdown(
     """
@@ -80,72 +62,160 @@ st.markdown(
         padding: 2rem 2.2rem;
         margin-bottom: 1.5rem;
     }
-    .av-hero h1 { font-size: 2.1rem; margin-bottom: 0.2rem; color: #f2f9f4; }
-    .av-hero p { color: #9db3a8; font-size: 1rem; margin: 0; }
+    .av-hero h1 {
+        font-size: 2.1rem;
+        margin-bottom: 0.2rem;
+        color: #f2f9f4;
+    }
+    .av-hero p {
+        color: #9db3a8;
+        font-size: 1rem;
+        margin: 0;
+    }
     .av-badge {
-        display: inline-block; background: #1c3327; color: #4ade80;
-        border-radius: 999px; padding: 3px 12px; font-size: 0.75rem;
-        font-weight: 600; letter-spacing: 0.03em; margin-bottom: 0.8rem;
+        display: inline-block;
+        background: #1c3327;
+        color: #4ade80;
+        border-radius: 999px;
+        padding: 3px 12px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        letter-spacing: 0.03em;
+        margin-bottom: 0.8rem;
     }
 
+    /* tabs */
     .stTabs [data-baseweb="tab-list"] { gap: 4px; border-bottom: 1px solid #21362a; }
     .stTabs [data-baseweb="tab"] {
-        background-color: transparent; border-radius: 8px 8px 0 0;
-        padding: 10px 16px; color: #9db3a8;
+        background-color: transparent;
+        border-radius: 8px 8px 0 0;
+        padding: 10px 16px;
+        color: #9db3a8;
     }
     .stTabs [aria-selected="true"] {
-        background-color: #16261d !important; color: #4ade80 !important; font-weight: 600;
+        background-color: #16261d !important;
+        color: #4ade80 !important;
+        font-weight: 600;
     }
 
+    /* card-like containers for sections */
     div[data-testid="stVerticalBlockBorderWrapper"] {
-        background-color: #131b18; border: 1px solid #21362a; border-radius: 12px;
+        background-color: #131b18;
+        border: 1px solid #21362a;
+        border-radius: 12px;
     }
 
+    /* metrics */
     div[data-testid="stMetric"] {
-        background-color: #131b18; border: 1px solid #21362a; border-radius: 10px; padding: 14px 16px;
+        background-color: #131b18;
+        border: 1px solid #21362a;
+        border-radius: 10px;
+        padding: 14px 16px;
     }
     div[data-testid="stMetricLabel"] { color: #9db3a8; }
 
-    button[kind="primary"] { background-color: #22c55e; border: none; }
+    button[kind="primary"] {
+        background-color: #22c55e;
+        border: none;
+    }
     button[kind="primary"]:hover { background-color: #16a34a; }
 
+    /* -----------------------------------------------------------
+       Floating AI-assistant "farmer" bubble.
+       Targeted directly by Streamlit's own data-testid for a popover
+       widget (div[data-testid="stPopover"]) rather than guessing at
+       DOM nesting depth -- this is stable across Streamlit versions.
+       Pinned to the LEFT side of the viewport, a little above center,
+       above everything else (z-index). The button is styled into a
+       round avatar with an idle float, a hover "greet", and a press
+       animation so it reads as a little living farmer character
+       rather than a normal widget.
+       ----------------------------------------------------------- */
     div[data-testid="stPopover"] {
-        position: fixed !important; top: 58%; left: 26px; margin-top: -34px;
-        z-index: 9999; width: auto !important; animation: av-bob 3.2s ease-in-out infinite;
+        position: fixed !important;
+        top: 58%;
+        left: 26px;
+        margin-top: -34px; /* half the button's height, to vertically anchor at 58% */
+        z-index: 9999;
+        width: auto !important;
+        animation: av-bob 3.2s ease-in-out infinite;
     }
-    @keyframes av-bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
+
+    @keyframes av-bob {
+        0%, 100% { transform: translateY(0); }
+        50% { transform: translateY(-10px); }
+    }
 
     div[data-testid="stPopover"] button {
-        position: relative; width: 68px; height: 68px; border-radius: 50%;
-        font-size: 1.7rem; background: linear-gradient(135deg, #22c55e, #16a34a);
-        border: 3px solid #0e1414; box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
-        color: white; transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;
+        position: relative;
+        width: 68px;
+        height: 68px;
+        border-radius: 50%;
+        font-size: 1.7rem;
+        background: linear-gradient(135deg, #22c55e, #16a34a);
+        border: 3px solid #0e1414;
+        box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+        color: white;
+        transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;
     }
     div[data-testid="stPopover"] button:hover {
-        transform: scale(1.12) rotate(-6deg); box-shadow: 0 10px 26px rgba(34, 197, 94, 0.45); border-color: #4ade80;
+        transform: scale(1.12) rotate(-6deg);
+        box-shadow: 0 10px 26px rgba(34, 197, 94, 0.45);
+        border-color: #4ade80;
     }
-    div[data-testid="stPopover"] button:active { transform: scale(0.9) rotate(0deg); }
-    div[data-testid="stPopover"] button p { font-size: 1.7rem; }
+    div[data-testid="stPopover"] button:active {
+        transform: scale(0.9) rotate(0deg);
+    }
+    div[data-testid="stPopover"] button p {
+        font-size: 1.7rem;
+    }
 
+    /* small "speech" hint that peeks out on hover, to invite a click */
     div[data-testid="stPopover"] button::after {
-        content: "Ask me! 💬"; position: absolute; left: 82px; top: 50%;
-        transform: translateY(-50%) translateX(-6px); background: #16261d; border: 1px solid #21362a;
-        color: #e8f0ec; padding: 6px 12px; border-radius: 8px; font-size: 0.8rem; white-space: nowrap;
-        opacity: 0; pointer-events: none; transition: opacity 0.2s ease, transform 0.2s ease;
+        content: "Ask me! 💬";
+        position: absolute;
+        left: 82px;
+        top: 50%;
+        transform: translateY(-50%) translateX(-6px);
+        background: #16261d;
+        border: 1px solid #21362a;
+        color: #e8f0ec;
+        padding: 6px 12px;
+        border-radius: 8px;
+        font-size: 0.8rem;
+        white-space: nowrap;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.2s ease, transform 0.2s ease;
         box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
     }
-    div[data-testid="stPopover"] button:hover::after { opacity: 1; transform: translateY(-50%) translateX(0); }
+    div[data-testid="stPopover"] button:hover::after {
+        opacity: 1;
+        transform: translateY(-50%) translateX(0);
+    }
 
+    /* popup panel that opens above the bubble */
     div[data-testid="stPopoverBody"] {
-        width: 340px; background-color: #131b18; border: 1px solid #21362a;
-        border-radius: 14px; animation: av-panel-in 0.18s ease-out;
+        width: 340px;
+        background-color: #131b18;
+        border: 1px solid #21362a;
+        border-radius: 14px;
+        animation: av-panel-in 0.18s ease-out;
     }
     @keyframes av-panel-in {
         0% { opacity: 0; transform: translateY(6px) scale(0.97); }
         100% { opacity: 1; transform: translateY(0) scale(1); }
     }
-    div[data-testid="stPopoverBody"] button { transition: transform 0.15s ease, border-color 0.15s ease; }
-    div[data-testid="stPopoverBody"] button:hover { transform: translateX(2px); border-color: #4ade80 !important; }
+
+    /* chip buttons and suggestions inside the chat panel get a little
+       lift on hover so the panel feels responsive too */
+    div[data-testid="stPopoverBody"] button {
+        transition: transform 0.15s ease, border-color 0.15s ease;
+    }
+    div[data-testid="stPopoverBody"] button:hover {
+        transform: translateX(2px);
+        border-color: #4ade80 !important;
+    }
     </style>
 
     <div class="av-hero">
@@ -158,7 +228,8 @@ st.markdown(
 )
 
 # ----------------------------------------------------------------------
-# Session state
+# Session state -- this is how tabs (and the floating assistant) share
+# the farmer's profile/data
 # ----------------------------------------------------------------------
 if "profile" not in st.session_state:
     st.session_state.profile = {}
@@ -196,8 +267,7 @@ with st.sidebar:
     for name, live in status.items():
         icon = "🟢 live" if live else "🟡 demo"
         st.write(f"{name.replace('_', ' ').title()}: {icon}")
-    st.write(f"Crop Model (direct file): {'🟢 live' if crop_model is not None else '🟡 demo'}")
-    st.caption("Drop matching .pkl files in to go live. See utils.py for the /models contract.")
+    st.caption("Drop a matching .pkl into /models to go live. See utils.py for the contract.")
 
 tabs = st.tabs(
     [
@@ -338,159 +408,194 @@ with tabs[1]:
                 st.plotly_chart(gauge, use_container_width=True)
 
 # ----------------------------------------------------------------------
-# 3. Crop Recommendation (uses crop_model.pkl / label_encoder.pkl if present)
+# 3. Crop Recommendation
 # ----------------------------------------------------------------------
+import joblib
+import numpy as np
+
+crop_model = joblib.load("crop_model.pkl")
+label_encoder = joblib.load("label_encoder.pkl")
 with tabs[2]:
+
     with st.container(border=True):
+
         st.header("🌾 AI-Powered Crop Recommendation")
+
         st.caption("Enter the latest soil test values to get the best crop recommendation.")
 
-        if crop_model is None or label_encoder is None:
-            st.info(
-                "crop_model.pkl / label_encoder.pkl haven't been added to the streamlit_app "
-                "folder yet -- ask your teammate to commit them there (same folder as app.py). "
-                "Showing the form below so it's ready to go the moment those files land."
-            )
-
         col1, col2 = st.columns(2)
+
         with col1:
+
             N = st.number_input("Nitrogen (N)", 0, 200, 90)
+
             P = st.number_input("Phosphorus (P)", 0, 200, 42)
+
             K = st.number_input("Potassium (K)", 0, 250, 43)
+
             ph = st.number_input("Soil pH", 0.0, 14.0, 6.5)
+
         with col2:
-            crop_temp = st.number_input("Temperature (°C)", 0.0, 50.0, 27.0, key="crop_temp")
+
+            temperature = st.number_input("Temperature (°C)", 0.0, 50.0, 27.0)
+
             humidity = st.number_input("Humidity (%)", 0.0, 100.0, 80.0)
-            crop_rainfall = st.number_input("Rainfall (mm)", 0.0, 3000.0, 800.0, key="crop_rainfall")
+
+            rainfall = st.number_input("Rainfall (mm)", 0.0, 3000.0, 800.0)
 
         if st.button("🌱 Generate Crop Recommendation", type="primary"):
-            if crop_model is None or label_encoder is None:
-                st.error("Can't run a real prediction yet -- the model files aren't in the repo. See the note above.")
-            else:
-                npk_total = N + P + K
-                n_ratio = N / npk_total if npk_total else 0
-                p_ratio = P / npk_total if npk_total else 0
-                k_ratio = K / npk_total if npk_total else 0
-                rainfall_low = int(crop_rainfall < 100)
-                rainfall_medium = int(100 <= crop_rainfall < 200)
-                rainfall_high = int(crop_rainfall >= 200)
-                temp_cool = int(crop_temp < 20)
-                temp_moderate = int(20 <= crop_temp < 30)
-                temp_hot = int(crop_temp >= 30)
 
-                features = np.array([[
-                    N, P, K, crop_temp, humidity, ph, crop_rainfall, npk_total,
-                    n_ratio, p_ratio, k_ratio, rainfall_low, rainfall_medium,
-                    rainfall_high, temp_cool, temp_moderate, temp_hot,
-                ]])
+            # -----------------------
+            # Feature Engineering
+            # -----------------------
 
-                prediction = crop_model.predict(features)
-                crop = label_encoder.inverse_transform(prediction)[0]
-                confidence = float(np.max(crop_model.predict_proba(features)) * 100)
+            npk_total = N + P + K
 
-                st.success(f"🌾 Recommended Crop : **{crop.upper()}**")
-                st.progress(int(confidence))
-                st.metric("Model Confidence", f"{confidence:.2f}%")
-                st.divider()
+            n_ratio = N / npk_total if npk_total else 0
 
-                c1, c2, c3 = st.columns(3)
-                with c1:
-                    st.info("💧 Water Requirement")
-                    st.write("Based on crop")
-                with c2:
-                    st.info("🌱 Growing Season")
-                    st.write("Kharif / Rabi")
-                with c3:
-                    st.info("📈 Suitability")
-                    st.write("Excellent")
+            p_ratio = P / npk_total if npk_total else 0
 
-                st.divider()
-                st.subheader("AI Recommendation")
-                st.success(
-                    f"""
+            k_ratio = K / npk_total if npk_total else 0
+
+            rainfall_low = int(rainfall < 100)
+
+            rainfall_medium = int(100 <= rainfall < 200)
+
+            rainfall_high = int(rainfall >= 200)
+
+            temp_cool = int(temperature < 20)
+
+            temp_moderate = int(20 <= temperature < 30)
+
+            temp_hot = int(temperature >= 30)
+
+            features = np.array([[
+
+                N,
+
+                P,
+
+                K,
+
+                temperature,
+
+                humidity,
+
+                ph,
+
+                rainfall,
+
+                npk_total,
+
+                n_ratio,
+
+                p_ratio,
+
+                k_ratio,
+
+                rainfall_low,
+
+                rainfall_medium,
+
+                rainfall_high,
+
+                temp_cool,
+
+                temp_moderate,
+
+                temp_hot
+
+            ]])
+
+            prediction = crop_model.predict(features)
+
+            crop = label_encoder.inverse_transform(prediction)[0]
+
+            confidence = np.max(crop_model.predict_proba(features)) * 100
+
+            st.success(f"🌾 Recommended Crop : **{crop.upper()}**")
+
+            st.progress(int(confidence))
+
+            st.metric("Model Confidence", f"{confidence:.2f}%")
+
+            st.divider()
+
+            col1, col2, col3 = st.columns(3)
+
+            with col1:
+
+                st.info("💧 Water Requirement")
+
+                st.write("Based on crop")
+
+            with col2:
+
+                st.info("🌱 Growing Season")
+
+                st.write("Kharif / Rabi")
+
+            with col3:
+
+                st.info("📈 Suitability")
+
+                st.write("Excellent")
+
+            st.divider()
+
+            st.subheader("AI Recommendation")
+
+            st.success(
+
+                f"""
+
 ✅ Recommended Crop : **{crop}**
 
 ✔ Soil nutrients are suitable.
+
 ✔ Temperature matches crop requirement.
+
 ✔ Rainfall conditions are favourable.
-✔ Model selected this crop with **{confidence:.2f}% confidence**.
+
+✔ Random Forest Model selected this crop with **{confidence:.2f}% confidence**.
+
 """
-                )
 
-# ----------------------------------------------------------------------
-# 4. Yield Prediction
-# ----------------------------------------------------------------------
-with tabs[3]:
-    with st.container(border=True):
-        st.header("Yield Prediction")
-        col1, col2 = st.columns(2)
-        with col1:
-            yield_crop_type = st.text_input("Crop Type", value=st.session_state.profile.get("current_crop", "Wheat"), key="yield_crop_type")
-            land3 = st.slider("Total Land (hectares)", 0.0, 500.0, 5.0, key="land3")
-        with col2:
-            rainfall3 = st.slider("Rainfall (mm)", 0.0, 3000.0, 800.0, key="rain3")
-            temp3 = st.slider("Temperature (°C)", 0.0, 50.0, 27.0, key="temp3")
-        input_costs = st.slider("Input Costs (₹)", 0, 1000000, 20000, step=1000)
-
-        if st.button("Predict Yield", type="primary"):
-            inputs = {
-                "crop_type": yield_crop_type,
-                "total_land_ha": land3,
-                "rainfall_mm": rainfall3,
-                "temperature_c": temp3,
-                "input_costs": input_costs,
-            }
-            with st.spinner("Estimating yield..."):
-                time.sleep(0.6)
-                st.session_state.yield_result = predict_yield(inputs)
-
-        result = st.session_state.yield_result
-        if result:
-            if result["demo"]:
-                st.warning("Showing a DEMO estimate -- not a real model prediction yet.")
-
-            c1, c2 = st.columns([1, 1.4])
-            c1.metric("Predicted Yield", f"{result['value']} tons/hectare")
-            with c2:
-                seasons = ["This season", "+1", "+2", "+3"]
-                low = [result["value"] * f for f in (1.0, 0.9, 0.85, 0.8)]
-                high = [result["value"] * f for f in (1.0, 1.1, 1.15, 1.2)]
-                fig = go.Figure()
-                fig.add_trace(go.Scatter(x=seasons, y=high, line=dict(width=0), showlegend=False))
-                fig.add_trace(
-                    go.Scatter(
-                        x=seasons, y=low, fill="tonexty", line=dict(width=0),
-                        fillcolor="rgba(34,197,94,0.25)", showlegend=False,
-                    )
-                )
-                fig.add_trace(go.Scatter(x=seasons, y=[result["value"]] * 4, line=dict(color="#22c55e"), name="Point estimate"))
-                fig.update_layout(
-                    height=200, margin=dict(l=10, r=10, t=10, b=10),
-                    paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color="#e8f0ec",
-                    yaxis_title="tons/ha",
-                )
-                st.plotly_chart(fig, use_container_width=True)
+            )
+#-----------------------------------------------------------------------
+# 4. yield recomm
+# ==========================================================
+# 🌾 YIELD PREDICTION
+# ==========================================================
 
 # ----------------------------------------------------------------------
 # 5. Weather Dashboard
 # ----------------------------------------------------------------------
-WEATHER_API_KEY = st.secrets.get("OPENWEATHER_API_KEY", None) if hasattr(st, "secrets") else None
-
+import streamlit as st
+import pandas as pd
+import numpy as np
+import plotly.graph_objects as go
+import requests
+import time
+import joblib
+API_KEY = "fc99d46057bc6a25799d7a0577685b63"
 
 def get_weather(city):
-    if not WEATHER_API_KEY:
-        return None
+
     url = (
         f"https://api.openweathermap.org/data/2.5/weather"
-        f"?q={city},IN&appid={WEATHER_API_KEY}&units=metric"
+        f"?q={city},IN"
+        f"&appid={API_KEY}"
+        f"&units=metric"
     )
-    try:
-        response = requests.get(url, timeout=8)
-    except requests.RequestException:
-        return None
+
+    response = requests.get(url)
+
     if response.status_code != 200:
         return None
+
     data = response.json()
+
     return {
         "temperature": data["main"]["temp"],
         "humidity": data["main"]["humidity"],
@@ -499,61 +604,103 @@ def get_weather(city):
         "condition": data["weather"][0]["main"],
         "description": data["weather"][0]["description"],
         "icon": data["weather"][0]["icon"],
-        "city": data["name"],
+        "city": data["name"]
     }
-
-
 with tabs[4]:
+
     with st.container(border=True):
+
         st.header("🌦 Weather Intelligence Dashboard")
+
         p = st.session_state.profile
 
-        if not WEATHER_API_KEY:
-            st.info(
-                "Live weather isn't wired up yet -- add your OpenWeatherMap key to "
-                "Streamlit Cloud under Manage app → Settings → Secrets, as:\n\n"
-                "`OPENWEATHER_API_KEY = \"your-key-here\"`"
-            )
-
-        city = st.text_input("Enter City", value=p.get("region", "Patna"))
+        city = st.text_input(
+            "Enter City",
+            value=p.get("region", "Patna")
+        )
 
         if st.button("Get Live Weather"):
+
             weather = get_weather(city)
+
             if weather is None:
-                if not WEATHER_API_KEY:
-                    st.error("No weather API key configured yet -- see the note above.")
-                else:
-                    st.error("Unable to fetch weather for that city.")
+
+                st.error("Unable to fetch weather.")
+
             else:
+
                 st.success(f"Live Weather • {weather['city']}")
+
                 c1, c2, c3, c4 = st.columns(4)
+
                 with c1:
-                    st.metric("🌡 Temperature", f"{weather['temperature']} °C")
+                    st.metric(
+                        "🌡 Temperature",
+                        f"{weather['temperature']} °C"
+                    )
+
                 with c2:
-                    st.metric("💧 Humidity", f"{weather['humidity']}%")
+                    st.metric(
+                        "💧 Humidity",
+                        f"{weather['humidity']}%"
+                    )
+
                 with c3:
-                    st.metric("🌬 Wind", f"{weather['wind']} m/s")
+                    st.metric(
+                        "🌬 Wind",
+                        f"{weather['wind']} m/s"
+                    )
+
                 with c4:
-                    st.metric("🧭 Pressure", f"{weather['pressure']} hPa")
+                    st.metric(
+                        "🧭 Pressure",
+                        f"{weather['pressure']} hPa"
+                    )
 
                 st.divider()
-                col1, col2 = st.columns([1, 3])
+
+                col1, col2 = st.columns([1,3])
+
                 with col1:
-                    st.image(f"https://openweathermap.org/img/wn/{weather['icon']}@2x.png", width=100)
+
+                    st.image(
+                        f"https://openweathermap.org/img/wn/{weather['icon']}@2x.png",
+                        width=100
+                    )
+
                 with col2:
+
                     st.subheader(weather["condition"])
+
                     st.write(weather["description"].title())
 
                 st.divider()
+
                 st.subheader("🌾 AI Farming Advisory")
+
                 if weather["temperature"] > 35:
-                    st.warning("High temperature detected. Increase irrigation frequency.")
+
+                    st.warning(
+                        "High temperature detected. Increase irrigation frequency."
+                    )
+
                 elif weather["humidity"] > 85:
-                    st.warning("Very high humidity. Monitor crops for fungal diseases.")
+
+                    st.warning(
+                        "Very high humidity. Monitor crops for fungal diseases."
+                    )
+
                 elif weather["condition"] == "Rain":
-                    st.info("Rain expected. Avoid irrigation and fertilizer application today.")
+
+                    st.info(
+                        "Rain expected. Avoid irrigation and fertilizer application today."
+                    )
+
                 else:
-                    st.success("Weather conditions are favourable for normal farming operations.")
+
+                    st.success(
+                        "Weather conditions are favourable for normal farming operations."
+                    )
 
 # ----------------------------------------------------------------------
 # 6. Reports
@@ -566,7 +713,7 @@ with tabs[5]:
             st.info("Fill in the Farmer Profile tab to generate a report.")
         else:
             report_lines = [
-                "AgriVision AI -- Farmer Report",
+                f"AgriVision AI -- Farmer Report",
                 f"Farmer ID: {p.get('farmer_id')}",
                 f"Region: {p.get('region')}",
                 f"Land: {p.get('total_land_ha')} ha",
@@ -611,6 +758,8 @@ with tabs[6]:
 
             with col_left:
                 if st.session_state.income_result:
+                    # Simple simulated seasonal trend around the predicted point, same idea
+                    # as the reference demo's "Simulated Income Trend Over Seasons" chart.
                     base = st.session_state.income_result["value"]
                     seasons = ["Season 1", "Season 2", "Season 3", "Season 4"]
                     values = [base * f for f in (0.85, 1.05, 0.95, 1.0)]
@@ -635,6 +784,8 @@ with tabs[6]:
                     st.plotly_chart(bar, use_container_width=True)
 
             with col_right:
+                # Radar chart giving a quick visual "farmer profile" snapshot.
+                # Values are normalised 0-1 just for shape -- purely illustrative.
                 categories = ["Land", "Non-Ag Income", "Market Access", "Yield", "Income"]
                 land_score = min(p.get("total_land_ha", 0) / 20, 1)
                 nonagri_score = min(p.get("non_agri_income", 0) / 50000, 1)
@@ -646,7 +797,10 @@ with tabs[6]:
                 radar = go.Figure()
                 radar.add_trace(go.Scatterpolar(r=values + values[:1], theta=categories + categories[:1], fill="toself", line_color="#22c55e"))
                 radar.update_layout(
-                    polar=dict(radialaxis=dict(visible=True, range=[0, 1], showticklabels=False), bgcolor="rgba(0,0,0,0)"),
+                    polar=dict(
+                        radialaxis=dict(visible=True, range=[0, 1], showticklabels=False),
+                        bgcolor="rgba(0,0,0,0)",
+                    ),
                     showlegend=False, height=340, title="Farmer Profile Snapshot",
                     paper_bgcolor="rgba(0,0,0,0)", font_color="#e8f0ec",
                 )
@@ -655,33 +809,51 @@ with tabs[6]:
 
 
 # ----------------------------------------------------------------------
-# Floating AI Assistant "farmer" bubble
+# Floating AI Assistant "farmer" bubble -- lives outside the tabs, so it
+# renders on top of whichever tab is open. Tapping it pops open a small
+# chat panel anchored to the bubble.
 # ----------------------------------------------------------------------
 def render_ai_assistant_bubble():
     AVATARS = {"user": "🧑‍🌾", "assistant": "🌾"}
 
+    # Swap the plain emoji for the uploaded farmer artwork, if it's been
+    # committed to assets/farmer_icon.png. This is a separate, small CSS
+    # block (rather than folding it into the big static block above)
+    # because it needs the base64 string computed at runtime.
     if FARMER_ICON_B64:
         st.markdown(
             f"""
             <style>
             div[data-testid="stPopover"] button {{
                 background-image: url('data:image/png;base64,{FARMER_ICON_B64}');
-                background-size: cover; background-position: center; background-repeat: no-repeat;
-                font-size: 0 !important; color: transparent !important;
+                background-size: cover;
+                background-position: center;
+                background-repeat: no-repeat;
+                font-size: 0 !important;
+                color: transparent !important;
             }}
-            div[data-testid="stPopover"] button p {{ display: none; }}
+            div[data-testid="stPopover"] button p {{
+                display: none;
+            }}
             </style>
             """,
             unsafe_allow_html=True,
         )
 
+    # Draw a bit of extra attention (pulsing ring + bouncing badge) until
+    # the user's actually chatted with it at least once.
     if not st.session_state.chat_history:
         st.markdown(
             """
             <style>
             div[data-testid="stPopover"]::before {
-                content: ""; position: absolute; inset: -10px; border-radius: 50%;
-                background: rgba(34, 197, 94, 0.45); animation: av-pulse 2s ease-out infinite; z-index: -1;
+                content: "";
+                position: absolute;
+                inset: -10px;
+                border-radius: 50%;
+                background: rgba(34, 197, 94, 0.45);
+                animation: av-pulse 2s ease-out infinite;
+                z-index: -1;
             }
             @keyframes av-pulse {
                 0% { transform: scale(0.85); opacity: 0.7; }
@@ -689,12 +861,25 @@ def render_ai_assistant_bubble():
                 100% { transform: scale(1.55); opacity: 0; }
             }
             div[data-testid="stPopover"] button::before {
-                content: "💬"; position: absolute; top: -6px; right: -6px; background: #facc15;
-                border-radius: 50%; width: 24px; height: 24px; display: flex; align-items: center;
-                justify-content: center; font-size: 12px; animation: av-badge-bounce 1.6s ease-in-out infinite;
+                content: "💬";
+                position: absolute;
+                top: -6px;
+                right: -6px;
+                background: #facc15;
+                border-radius: 50%;
+                width: 24px;
+                height: 24px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                font-size: 12px;
+                animation: av-badge-bounce 1.6s ease-in-out infinite;
                 box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
             }
-            @keyframes av-badge-bounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-5px); } }
+            @keyframes av-badge-bounce {
+                0%, 100% { transform: translateY(0); }
+                50% { transform: translateY(-5px); }
+            }
             </style>
             """,
             unsafe_allow_html=True,
@@ -737,6 +922,3 @@ def render_ai_assistant_bubble():
 
 
 render_ai_assistant_bubble()
-PYEOF
-echo "written"
-Output
