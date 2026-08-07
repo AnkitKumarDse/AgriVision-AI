@@ -666,54 +666,118 @@ with tabs[3]:
 
         if predict_yield:
 
-            st.write("Crop:", repr(crop))
-            st.write("Season:", repr(season))
-            st.write("State:", repr(state))
+    try:
 
-            st.write("Crop classes:", crop_encoder.classes_)
-            st.write("Season classes:", season_encoder.classes_)
-            st.write("State classes:", state_encoder.classes_)
+        # -----------------------------
+        # Clean Inputs
+        # -----------------------------
+        crop = crop.strip()
+        season = season.strip()
+        state = state.strip()
 
-            crop_encoded = crop_encoder.transform([crop])[0]
-            st.success("Crop encoded")
+        # -----------------------------
+        # Safe Encoding
+        # -----------------------------
 
-            season_encoded = season_encoder.transform([season])[0]
-            st.success("Season encoded")
+        crop_encoded = crop_encoder.transform([crop])[0]
 
-            state_encoded = state_encoder.transform([state])[0]
-            st.success("State encoded")
+        season_classes = [x.strip() for x in season_encoder.classes_]
+        season_index = season_classes.index(season)
+        season_encoded = season_index
 
-            input_data = pd.DataFrame(
-                {
-                    "Crop": [crop_encoded],
-                    "Crop_Year": [crop_year],
-                    "Season": [season_encoded],
-                    "State": [state_encoded],
-                    "Area": [area],
-                    "Production": [production],
-                    "Annual_Rainfall": [rainfall],
-                    "Fertilizer": [fertilizer],
-                    "Pesticide": [pesticide],
-                }
-            )
+        state_classes = [x.strip() for x in state_encoder.classes_]
+        state_index = state_classes.index(state)
+        state_encoded = state_index
 
-            predicted_yield = float(
-                yield_model.predict(input_data)[0]
-            )
+        # -----------------------------
+        # Model Input
+        # -----------------------------
 
-            total_output = predicted_yield * area
+        input_data = pd.DataFrame({
+            "Crop":[crop_encoded],
+            "Crop_Year":[crop_year],
+            "Season":[season_encoded],
+            "State":[state_encoded],
+            "Area":[area],
+            "Production":[production],
+            "Annual_Rainfall":[rainfall],
+            "Fertilizer":[fertilizer],
+            "Pesticide":[pesticide]
+        })
 
-            st.success("✅ Yield Prediction Completed Successfully")
+        predicted_yield = float(
+            yield_model.predict(input_data)[0]
+        )
 
+        total_output = predicted_yield * area
+
+        st.success("🌾 Yield Prediction Completed Successfully!")
+
+        m1, m2, m3 = st.columns(3)
+
+        with m1:
             st.metric(
                 "🌾 Predicted Yield",
-                f"{predicted_yield:.2f} t/ha",
+                f"{predicted_yield:.2f} t/ha"
             )
 
+        with m2:
             st.metric(
                 "📦 Estimated Production",
-                f"{total_output:.2f} Tonnes",
+                f"{total_output:.2f} Tonnes"
             )
+
+        with m3:
+
+            if predicted_yield >= 5:
+                category = "Excellent 🟢"
+            elif predicted_yield >= 3:
+                category = "Average 🟡"
+            else:
+                category = "Low 🔴"
+
+            st.metric(
+                "Yield Category",
+                category
+            )
+
+        st.divider()
+
+        left,right = st.columns(2)
+
+        with left:
+
+            st.info(f"""
+**Crop:** {crop}
+
+**Season:** {season}
+
+**State:** {state}
+
+**Area:** {area:.2f} Hectares
+""")
+
+        with right:
+
+            st.info(f"""
+**Predicted Yield:** {predicted_yield:.2f} t/ha
+
+**Estimated Production:** {total_output:.2f} Tonnes
+""")
+
+        st.progress(min(predicted_yield/8,1.0))
+
+    except Exception as e:
+
+        st.error(f"Prediction Failed\n\n{e}")
+
+        st.write("Crop:",crop)
+        st.write("Season:",season)
+        st.write("State:",state)
+
+        st.write("Crop Classes:",crop_encoder.classes_)
+        st.write("Season Classes:",season_encoder.classes_)
+        st.write("State Classes:",state_encoder.classes_)
 # ----------------------------------------------------------------------
 # 5. Weather Dashboard
 # ----------------------------------------------------------------------
