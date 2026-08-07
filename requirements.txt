@@ -1,9 +1,9 @@
 streamlit
-pandas
-numpy
-plotly
-scikit-learn
-xgboost
-joblib
+pandas==2.2.3
+numpy==2.0.2
+plotly==6.0.1
+scikit-learn==1.6.1
+xgboost==3.3.0
+joblib==1.5.3
 google-generativeai
 requests
