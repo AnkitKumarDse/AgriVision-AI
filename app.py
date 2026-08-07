@@ -1067,6 +1067,60 @@ Instructions:
 
 
 # 4. Chatbot Floating UI & Logic Function
+import streamlit as st
+from groq import Groq
+
+# 1. Initialize session state variables first
+if "chat_history" not in st.session_state:
+    st.session_state.chat_history = []
+
+# Safe check for base64 image string to avoid NameErrors
+FARMER_ICON_B64 = globals().get("FARMER_ICON_B64", None)
+
+
+# 2. AI Assistant Reply Function (Groq + Llama 3)
+def ai_assistant_reply(question, context):
+    # Safely fetch API key directly inside the function
+    groq_api_key = st.secrets.get("GROQ_API_KEY", None)
+
+    if not groq_api_key:
+        return "❌ **Groq API Key Missing!**\n\nPlease add `GROQ_API_KEY` in Streamlit Cloud Dashboard: **Manage App** -> **Settings** -> **Secrets**."
+
+    prompt = f"""
+You are AgriVision AI.
+You are an expert agricultural advisor helping Indian farmers.
+
+Current Farmer Information:
+{context}
+
+Farmer Question:
+{question}
+
+Instructions:
+- Give practical farming advice.
+- Use simple English.
+- Answer in bullet points whenever possible.
+- If crop recommendation or yield prediction is available, use it.
+- Keep the answer under 250 words.
+"""
+
+    try:
+        # Initialize client directly inside function call using retrieved secret key
+        client = Groq(api_key=groq_api_key)
+
+        completion = client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.6,
+            max_tokens=400,
+        )
+        return completion.choices[0].message.content
+
+    except Exception as e:
+        return f"❌ Groq API Error:\n\n{e}"
+
+
+# 3. Chatbot Floating UI & Logic Function
 def render_ai_assistant_bubble():
     AVATARS = {"user": "🧑‍🌾", "assistant": "🌾"}
 
@@ -1198,5 +1252,5 @@ Monthly Income: {p.get('monthly_income', 'N/A')}
             st.rerun()
 
 
-# 5. Render the floating assistant button
+# 4. Render the floating assistant button
 render_ai_assistant_bubble()
