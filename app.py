@@ -1017,7 +1017,7 @@ from groq import Groq
 
 # 1. Initialize Groq Client securely from Streamlit Secrets
 try:
-    groq_client = Groq(api_key=st.secrets["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"])
+    GROQ_API_KEY = "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"
 except Exception as e:
     groq_client = None
 
