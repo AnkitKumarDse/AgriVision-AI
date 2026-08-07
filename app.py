@@ -574,15 +574,15 @@ if predict_yield:
     state_encoded = state_encoder.transform([state])[0]
 
     input_data = pd.DataFrame({
-        "Crop":[crop_encoded],
-        "Crop_Year":[crop_year],
-        "Season":[season_encoded],
-        "State":[state_encoded],
-        "Area":[area],
-        "Production":[production],
-        "Annual_Rainfall":[rainfall],
-        "Fertilizer":[fertilizer],
-        "Pesticide":[pesticide]
+        "Crop": [crop_encoded],
+        "Crop_Year": [crop_year],
+        "Season": [season_encoded],
+        "State": [state_encoded],
+        "Area": [area],
+        "Production": [production],
+        "Annual_Rainfall": [rainfall],
+        "Fertilizer": [fertilizer],
+        "Pesticide": [pesticide]
     })
 
     predicted_yield = float(yield_model.predict(input_data)[0])
@@ -591,43 +591,43 @@ if predict_yield:
 
     st.success("✅ Yield Prediction Completed Successfully")
 
-m1, m2, m3 = st.columns(3)
+    m1, m2, m3 = st.columns(3)
 
-with m1:
-    st.metric(
-        "🌾 Predicted Yield",
-        f"{predicted_yield:.2f} t/ha"
-    )
+    with m1:
+        st.metric(
+            "🌾 Predicted Yield",
+            f"{predicted_yield:.2f} t/ha"
+        )
 
-with m2:
-    st.metric(
-        "📦 Estimated Production",
-        f"{total_output:.2f} Tonnes"
-    )
-  with m3:
+    with m2:
+        st.metric(
+            "📦 Estimated Production",
+            f"{total_output:.2f} Tonnes"
+        )
 
-    if predicted_yield >= 5:
-        category = "Excellent 🟢"
+    with m3:
 
-    elif predicted_yield >= 3:
-        category = "Average 🟡"
+        if predicted_yield >= 5:
+            category = "Excellent 🟢"
 
-    else:
-        category = "Low 🔴"
+        elif predicted_yield >= 3:
+            category = "Average 🟡"
 
-    st.metric(
-        "📈 Yield Category",
-        category
-    )
+        else:
+            category = "Low 🔴"
 
-st.divider()
+        st.metric(
+            "📈 Yield Category",
+            category
+        )
 
-st.subheader("📊 Prediction Summary")
+    st.divider()
 
-left, right = st.columns(2)
+    st.subheader("📊 Prediction Summary")
 
-with left:
+    left, right = st.columns(2)
 
+    with left:
     st.info(f"""
 **Crop:** {crop}
 
