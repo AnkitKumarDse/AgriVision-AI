@@ -618,7 +618,7 @@ with m3:
         "📈 Yield Category",
         category
     )
-  st.divider()
+st.divider()
 
 st.subheader("📊 Prediction Summary")
 
