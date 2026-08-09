@@ -8,3 +8,4 @@ joblib
 google-generativeai
 requests
 groq
+feedparser
