@@ -1,27 +1,12 @@
 """
 AgriVision AI -- Streamlit frontend
 Run with: streamlit run app.py
-
-REDESIGN NOTES (this version):
-- Tabs reordered into a flow: General Dashboard -> Farmer Profile ->
-  Weather Intelligence -> Crop Recommendation -> Yield Prediction ->
-  Income Prediction -> Final Report. Each step feeds the next via
-  st.session_state, and General Dashboard + Final Report both pull
-  from everything that's been run so far.
-- Removed a duplicate/broken "Predict Farm Value" flow that referenced
-  undefined variables (district, gender, irrigated, etc.) -- would
-  have crashed on click. Its Agricultural Support inputs are now
-  folded into the one real prediction call.
-- Removed a hardcoded Groq API key that was sitting in the file
-  unused (dead code) -- rotate that key on console.groq.com since it
-  was public in the repo. The real, working Groq call reads
-  st.secrets["GROQ_API_KEY"] like it should.
-- Bigger, bolder visual language: gradient hero title, colored KPI
-  cards, glowing active tab.
 """
 
 import base64
 import time
+import urllib.request
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 import joblib
@@ -34,8 +19,7 @@ import streamlit as st
 st.set_page_config(page_title="AgriVision AI", page_icon="🌾", layout="wide")
 
 # ----------------------------------------------------------------------
-# Load all real models once, safely (never crash the whole app if a
-# file is missing -- show a clear message on the tab that needs it).
+# Load all real models once, safely
 # ----------------------------------------------------------------------
 @st.cache_resource
 def load_pickle(name):
@@ -130,19 +114,11 @@ st.markdown(
     .led-on { background: #4ade80; box-shadow: 0 0 8px #4ade80; }
     .led-off { background: #64748b; }
 
-    /* ---------------- STICKY TABS BAR ---------------- */
-    .stTabs {
-        position: sticky !important;
-        top: 0px !important;
-        z-index: 99999 !important;
-        background-color: #070b09 !important;
-        padding-top: 10px !important;
-        padding-bottom: 10px !important;
-        margin-top: -6.2rem;
-    }
+    /* ---------------- TABS ---------------- */
+    .stTabs { margin-top: -6.2rem; position: relative; z-index: 5; }
     .stTabs [data-baseweb="tab-list"] {
         gap: 4px; border-bottom: none;
-        background: rgba(20, 30, 24, 0.85);
+        background: rgba(20, 30, 24, 0.75);
         backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
         border: 1px solid rgba(74, 222, 128, 0.18);
         border-radius: 18px; padding: 10px 12px;
@@ -300,7 +276,7 @@ for key, default in [
         st.session_state[key] = default
 
 # ----------------------------------------------------------------------
-# Sidebar -- kept minimal; live status now lives in the hero itself.
+# Sidebar
 # ----------------------------------------------------------------------
 with st.sidebar:
     st.markdown("### 🌾 AgriVision AI")
@@ -319,23 +295,14 @@ tabs = st.tabs(
 )
 
 # ----------------------------------------------------------------------
-# 0. General Dashboard -- India agri market overview. Deliberately does
-# NOT depend on the farmer's profile -- this is the "walk up and see
-# something useful" landing screen. Personal predictions live in their
-# own tabs and roll up into Final Report.
+# 0. General Dashboard -- India agri market overview
 # ----------------------------------------------------------------------
-import urllib.request
-import xml.etree.ElementTree as ET
-
-
 @st.cache_data(ttl=1800)
 def fetch_agri_news():
-    """Fetches live Indian agricultural news via Google News RSS using built-in Python libraries."""
+    """Fetches live Indian agricultural news via Google News RSS using built-in libraries."""
     rss_url = "https://news.google.com/rss/search?q=India+agriculture&hl=en-IN&gl=IN&ceid=IN:en"
     try:
-        req = urllib.request.Request(
-            rss_url, headers={"User-Agent": "Mozilla/5.0"}
-        )
+        req = urllib.request.Request(rss_url, headers={"User-Agent": "Mozilla/5.0"})
         with urllib.request.urlopen(req, timeout=8) as response:
             xml_data = response.read()
 
@@ -343,23 +310,10 @@ def fetch_agri_news():
         articles = []
 
         for item in root.findall("./channel/item")[:5]:
-            title = (
-                item.find("title").text
-                if item.find("title") is not None
-                else "Agri News"
-            )
-            link = (
-                item.find("link").text
-                if item.find("link") is not None
-                else "#"
-            )
+            title = item.find("title").text if item.find("title") is not None else "Agri News"
+            link = item.find("link").text if item.find("link") is not None else "#"
             source_elem = item.find("source")
-            source = (
-                source_elem.text
-                if source_elem is not None
-                else "Google News"
-            )
-
+            source = source_elem.text if source_elem is not None else "Google News"
             articles.append({"title": title, "source": source, "url": link})
 
         return articles if articles else None
@@ -445,6 +399,9 @@ with tabs[0]:
         st.markdown(f'<div class="av-pipeline">{step_html}</div>', unsafe_allow_html=True)
 
 
+# ----------------------------------------------------------------------
+# 1. Farmer Profile
+# ----------------------------------------------------------------------
 with tabs[1]:
     with st.container(border=True):
         st.header("Farmer Profile")
@@ -613,12 +570,12 @@ with tabs[3]:
                 crop = label_encoder.inverse_transform(prediction)[0]
                 confidence = float(np.max(crop_model.predict_proba(features)) * 100)
 
-                st.session_state.recommended_crop = crop
-                st.session_state.crop_confidence = confidence
+                st.session_state["recommended_crop"] = crop
+                st.session_state["crop_confidence"] = confidence
 
-        if st.session_state.recommended_crop:
-            crop = st.session_state.recommended_crop
-            confidence = st.session_state.crop_confidence
+        if st.session_state.get("recommended_crop"):
+            crop = st.session_state.get("recommended_crop")
+            confidence = st.session_state.get("crop_confidence", 85.0)
             st.success(f"🌾 Recommended Crop : **{crop.upper()}**")
             st.progress(int(confidence))
             st.metric("Model Confidence", f"{confidence:.2f}%")
@@ -664,7 +621,7 @@ with tabs[4]:
             "Rice", "Wheat", "Maize", "Cotton", "Sugarcane", "Barley",
             "Millets", "Groundnut", "Soybean", "Potato", "Gram", "Turmeric",
         ]
-        default_crop = st.session_state.recommended_crop
+        default_crop = st.session_state.get("recommended_crop")
         default_index = 0
         if default_crop:
             for i, opt in enumerate(crop_options):
@@ -676,7 +633,7 @@ with tabs[4]:
         with left:
             crop = st.selectbox("Crop", crop_options, index=default_index)
             if default_crop and crop.lower() == default_crop.lower():
-                st.caption(f"✓ Pre-filled from your Crop Recommendation ({st.session_state.crop_confidence:.0f}% confidence)")
+                st.caption(f"✓ Pre-filled from your Crop Recommendation ({st.session_state.get('crop_confidence', 85):.0f}% confidence)")
             season = st.selectbox("Season", ["Kharif", "Rabi", "Summer", "Whole Year", "Winter", "Autumn"])
             state = st.text_input("State", st.session_state.profile.get("region", "Punjab"))
             crop_year = st.number_input("Crop Year", 1997, 2035, 2026)
@@ -717,18 +674,18 @@ with tabs[4]:
                     predicted_yield = float(yield_model.predict(input_data)[0])
                     total_output = predicted_yield * area
 
-                    st.session_state.predicted_yield = predicted_yield
-                    st.session_state.total_output = total_output
-                    st.session_state.yield_crop = crop_c
-                    st.session_state.yield_season = season_c
-                    st.session_state.yield_state = state_c
+                    st.session_state["predicted_yield"] = predicted_yield
+                    st.session_state["total_output"] = total_output
+                    st.session_state["yield_crop"] = crop_c
+                    st.session_state["yield_season"] = season_c
+                    st.session_state["yield_state"] = state_c
                 except Exception as e:
                     st.error("Prediction Failed")
                     st.exception(e)
 
-        if st.session_state.predicted_yield:
-            predicted_yield = st.session_state.predicted_yield
-            total_output = st.session_state.total_output
+        if st.session_state.get("predicted_yield"):
+            predicted_yield = st.session_state.get("predicted_yield")
+            total_output = st.session_state.get("total_output", predicted_yield * area)
             st.success("✅ Yield Prediction Completed Successfully!")
 
             m1, m2, m3 = st.columns(3)
@@ -740,7 +697,7 @@ with tabs[4]:
             st.divider()
             left2, right2 = st.columns(2)
             with left2:
-                st.info(f"**Crop:** {st.session_state.yield_crop}\n\n**Season:** {st.session_state.yield_season}\n\n**State:** {st.session_state.yield_state}")
+                st.info(f"**Crop:** {st.session_state.get('yield_crop', crop)}\n\n**Season:** {st.session_state.get('yield_season', season)}\n\n**State:** {st.session_state.get('yield_state', state)}")
             with right2:
                 st.info(f"**Predicted Yield:** {predicted_yield:.2f} t/ha\n\n**Estimated Production:** {total_output:.2f} Tonnes")
 
@@ -764,11 +721,11 @@ with tabs[5]:
             st.subheader("Farmer & Farm Information")
             col1, col2, col3, col4 = st.columns(4)
             col1.metric("Land Area", f"{p.get('total_land_ha', 5.0):.2f} ha")
-            col2.metric("Primary Crop", st.session_state.recommended_crop or p.get('current_crop', 'Wheat'))
+            col2.metric("Primary Crop", st.session_state.get('recommended_crop') or p.get('current_crop', 'Wheat'))
             col3.metric("State", p.get('region', 'Punjab'))
             col4.metric("Age", f"{p.get('age', 35)} years")
-            if st.session_state.recommended_crop:
-                st.caption(f"✓ Using your recommended crop ({st.session_state.recommended_crop}) instead of the profile default.")
+            if st.session_state.get('recommended_crop'):
+                st.caption(f"✓ Using your recommended crop ({st.session_state.get('recommended_crop')}) instead of the profile default.")
 
             st.markdown("---")
             st.subheader("🌱 Farm Details")
@@ -802,7 +759,7 @@ with tabs[5]:
                     age = float(p.get("age", 35))
                     land_area = float(p.get("total_land_ha", 5.0))
                     state = p.get("region", "Punjab")
-                    current_crop = st.session_state.recommended_crop or p.get("current_crop", "Wheat")
+                    current_crop = st.session_state.get('recommended_crop') or p.get("current_crop", "Wheat")
                     education = p.get("education_level", "Secondary")
 
                     crop_map = {
@@ -841,10 +798,10 @@ with tabs[5]:
                     }])
 
                     predicted_value = max(0, float(farm_value_model.predict(input_data)[0]))
-                    st.session_state.farm_value_result = predicted_value
+                    st.session_state["farm_value_result"] = predicted_value
 
-            if st.session_state.farm_value_result:
-                predicted_value = st.session_state.farm_value_result
+            if st.session_state.get("farm_value_result"):
+                predicted_value = st.session_state.get("farm_value_result")
                 st.markdown("---")
                 st.success("Farm value estimated successfully!")
                 col1, col2 = st.columns([1.3, 1])
@@ -878,22 +835,26 @@ with tabs[6]:
         if not p:
             st.info("Fill in the Farmer Profile tab to generate a report.")
         else:
+            rec_crop = st.session_state.get("recommended_crop", None)
+            pred_yield = st.session_state.get("predicted_yield", None)
+            farm_val = st.session_state.get("farm_value_result", None)
+
             c1, c2, c3, c4 = st.columns(4)
-            c1.metric("Land Holding", f"{p.get('total_land_ha')} ha")
-            c2.metric("Recommended Crop", st.session_state.recommended_crop.upper() if st.session_state.recommended_crop else "Not run yet")
-            c3.metric("Predicted Yield", f"{st.session_state.predicted_yield:.2f} t/ha" if st.session_state.predicted_yield else "Not run yet")
-            c4.metric("Farm Value", f"₹{st.session_state.farm_value_result:,.0f}" if st.session_state.farm_value_result else "Not run yet")
+            c1.metric("Land Holding", f"{p.get('total_land_ha', 5.0)} ha")
+            c2.metric("Recommended Crop", rec_crop.upper() if rec_crop else "Not run yet")
+            c3.metric("Predicted Yield", f"{pred_yield:.2f} t/ha" if pred_yield else "Not run yet")
+            c4.metric("Farm Value", f"₹{farm_val:,.0f}" if farm_val else "Not run yet")
 
             st.divider()
 
             # ---- Composite AI Farm Score ----
             scored_parts = []
-            if st.session_state.crop_confidence:
-                scored_parts.append(st.session_state.crop_confidence)
-            if st.session_state.predicted_yield:
-                scored_parts.append(min(st.session_state.predicted_yield / 8 * 100, 100))
-            if st.session_state.farm_value_result:
-                scored_parts.append(min(st.session_state.farm_value_result / 300000 * 100, 100))
+            if st.session_state.get("crop_confidence"):
+                scored_parts.append(st.session_state.get("crop_confidence"))
+            if pred_yield:
+                scored_parts.append(min(pred_yield / 8 * 100, 100))
+            if farm_val:
+                scored_parts.append(min(farm_val / 300000 * 100, 100))
             ai_score = sum(scored_parts) / len(scored_parts) if scored_parts else 0
 
             if ai_score >= 75:
@@ -924,8 +885,8 @@ with tabs[6]:
             with col_charts:
                 cc1, cc2 = st.columns(2)
                 with cc1:
-                    if st.session_state.farm_value_result:
-                        base = st.session_state.farm_value_result
+                    if farm_val:
+                        base = farm_val
                         seasons = ["S1", "S2", "S3", "S4"]
                         values = [base * f for f in (0.85, 1.05, 0.95, 1.0)]
                         fig = go.Figure()
@@ -937,8 +898,8 @@ with tabs[6]:
                     land_score = min(p.get("total_land_ha", 0) / 20, 1)
                     nonagri_score = min(p.get("non_agri_income", 0) / 50000, 1)
                     market_score = 1 - min(p.get("distance_to_market_km", 0) / 100, 1)
-                    yield_score = min((st.session_state.predicted_yield or 3) / 10, 1)
-                    value_score = min((st.session_state.farm_value_result or 20000) / 300000, 1)
+                    yield_score = min((pred_yield or 3) / 10, 1)
+                    value_score = min((farm_val or 20000) / 300000, 1)
                     values = [land_score, nonagri_score, market_score, yield_score, value_score]
                     radar = go.Figure()
                     radar.add_trace(go.Scatterpolar(r=values + values[:1], theta=categories + categories[:1], fill="toself", line_color="#22c55e"))
@@ -957,14 +918,14 @@ with tabs[6]:
                 f"Land: {p.get('total_land_ha')} ha",
                 f"Current Crop: {p.get('current_crop')}",
             ]
-            if st.session_state.recommended_crop:
-                report_lines.append(f"Recommended Crop: {st.session_state.recommended_crop} ({st.session_state.crop_confidence:.1f}% confidence)")
-            if st.session_state.predicted_yield:
-                report_lines.append(f"Predicted Yield: {st.session_state.predicted_yield:.2f} t/ha ({st.session_state.total_output:.1f} tonnes total)")
-            if st.session_state.farm_value_result:
-                report_lines.append(f"Estimated Farm Value: ₹{st.session_state.farm_value_result:,.0f}")
-            if st.session_state.weather_result:
-                w = st.session_state.weather_result
+            if rec_crop:
+                report_lines.append(f"Recommended Crop: {rec_crop} ({st.session_state.get('crop_confidence', 0):.1f}% confidence)")
+            if pred_yield:
+                report_lines.append(f"Predicted Yield: {pred_yield:.2f} t/ha ({st.session_state.get('total_output', 0):.1f} tonnes total)")
+            if farm_val:
+                report_lines.append(f"Estimated Farm Value: ₹{farm_val:,.0f}")
+            if st.session_state.get("weather_result"):
+                w = st.session_state.get("weather_result")
                 report_lines.append(f"Weather at time of report: {w['temperature']}°C, {w['condition']} ({w['city']})")
 
             report_text = "\n".join(report_lines)
@@ -1052,12 +1013,12 @@ def render_ai_assistant_bubble():
                 f"Age: {p.get('age', 'N/A')}\nState: {p.get('region', 'N/A')}\n"
                 f"Land: {p.get('total_land_ha', 'N/A')} ha\nCurrent Crop: {p.get('current_crop', 'N/A')}\n"
             )
-            if st.session_state.recommended_crop:
-                context += f"Recommended Crop: {st.session_state.recommended_crop} ({st.session_state.crop_confidence:.0f}% confidence)\n"
-            if st.session_state.predicted_yield:
-                context += f"Predicted Yield: {st.session_state.predicted_yield:.2f} t/ha\n"
-            if st.session_state.farm_value_result:
-                context += f"Estimated Farm Value: ₹{st.session_state.farm_value_result:,.0f}\n"
+            if st.session_state.get("recommended_crop"):
+                context += f"Recommended Crop: {st.session_state.get('recommended_crop')} ({st.session_state.get('crop_confidence', 0):.0f}% confidence)\n"
+            if st.session_state.get("predicted_yield"):
+                context += f"Predicted Yield: {st.session_state.get('predicted_yield'):.2f} t/ha\n"
+            if st.session_state.get("farm_value_result"):
+                context += f"Estimated Farm Value: ₹{st.session_state.get('farm_value_result'):,.0f}\n"
 
             st.session_state.chat_history.append(("user", question))
             with st.spinner("AgriVision AI is thinking..."):
