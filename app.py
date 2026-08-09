@@ -330,83 +330,618 @@ with tabs[0]:
 
 # ----------------------------------------------------------------------
 # 2. Income Estimation
+import joblib
+import pandas as pd
+import numpy as np
+# ================================================================
+# LOAD FINAL FARM VALUE MODEL
+# ================================================================
+
+@st.cache_resource
+def load_farm_value_model():
+    return joblib.load("farm_value_final_xgboost.pkl")
+
+
+@st.cache_resource
+def load_farm_value_features():
+    return joblib.load("farm_value_final_features.pkl")
+
+
+farm_value_model = load_farm_value_model()
+farm_value_features = load_farm_value_features()
 # ----------------------------------------------------------------------
+# 2. FARM VALUE ESTIMATION
+# ----------------------------------------------------------------------
+
 with tabs[1]:
     with st.container(border=True):
-        st.header("Income Estimation")
+
+        st.header("Farm Value Estimation")
+        st.caption(
+            "Estimate the total agricultural value of the farm using the trained NSS-based XGBoost model."
+        )
+
         p = st.session_state.profile
+
         if not p:
-            st.info("Fill in the Farmer Profile tab first (or just enter values below).")
-
-        col1, col2 = st.columns(2)
-        with col1:
-            crop_yield = st.slider("Crop Yield per Hectare (tons)", 0.0, 50.0, 10.2, help="Average yield across your last few seasons")
-            rainfall = st.slider("Rainfall (mm, seasonal avg)", 0.0, 3000.0, 800.0)
-        with col2:
-            land_override = st.slider(
-                "Total Agricultural Land (hectares)", 0.0, 500.0, float(p.get("total_land_ha", 5.0)),
-                key="land_income"
+            st.info(
+                "Fill in the Farmer Profile tab first."
             )
-            st.caption(f"Using distance to market: {p.get('distance_to_market_km', 15.0)} km, non-ag income: ₹{p.get('non_agri_income', 12000)}")
 
-        if st.button("Predict Income", type="primary"):
-            inputs = {
-                "age": p.get("age", 35),
-                "education_level": p.get("education_level", "Secondary"),
-                "total_land_ha": land_override,
-                "crop_yield_per_ha": crop_yield,
-                "non_agri_income": p.get("non_agri_income", 12000),
-                "distance_to_market_km": p.get("distance_to_market_km", 15.0),
-                "rainfall_mm": rainfall,
-            }
-            with st.spinner("Running income model..."):
-                time.sleep(0.6)
-                st.session_state.income_result = predict_income(inputs)
+        # ============================================================
+        # ADDITIONAL FARM INFORMATION
+        # ============================================================
 
-        result = st.session_state.income_result
-        if result:
-            if result["demo"]:
-                st.warning("Showing a DEMO estimate (formula-based) -- not a real model prediction yet.")
+        st.subheader("🌾 Farm Characteristics")
 
-            baseline = p.get("non_agri_income", 12000) * 12
-            delta = result["value"] - baseline
-            c1, c2 = st.columns([1.2, 1])
-            with c1:
-                st.metric(
-                    "Predicted Income (monthly)",
-                    f"₹ {result['value']:,.0f}",
-                    delta=f"{delta:,.0f} vs non-agri baseline",
+        col1, col2, col3 = st.columns(3)
+
+        with col1:
+
+            district = st.selectbox(
+                "District",
+                list(range(1, 20)),
+                index=0
+            )
+
+            gender = st.selectbox(
+                "Gender",
+                ["Female", "Male", "Transgender"],
+                index=1
+            )
+
+            household_size = st.number_input(
+                "Household Size",
+                min_value=1.0,
+                max_value=30.0,
+                value=5.0,
+                step=1.0
+            )
+
+        with col2:
+
+            principal_activity = st.selectbox(
+                "Principal Activity",
+                [
+                    "Cultivation",
+                    "Agricultural Labour",
+                    "Other",
+                    "Domestic Duties",
+                    "Student",
+                    "Unpaid Family Worker",
+                    "MGNREGS Worker"
+                ]
+            )
+
+            agricultural_land = st.selectbox(
+                "Agricultural Land Ownership",
+                ["Yes", "No"],
+                index=0
+            )
+
+            irrigated = st.selectbox(
+                "Is the land irrigated?",
+                ["Yes", "No"],
+                index=0
+            )
+
+        with col3:
+
+            irrigated_area = st.number_input(
+                "Irrigated Area (hectares)",
+                min_value=0.0,
+                max_value=500.0,
+                value=min(
+                    float(p.get("total_land_ha", 5.0)),
+                    3.0
+                ),
+                step=0.1
+            )
+
+            crops_grown = st.number_input(
+                "Number of Crops Grown",
+                min_value=1.0,
+                max_value=20.0,
+                value=2.0,
+                step=1.0
+            )
+
+            irrigation_source = st.selectbox(
+                "Irrigation Source",
+                [
+                    "Ground Water",
+                    "Canal",
+                    "Minor Surface Works",
+                    "Others",
+                    "Combination of Canal, Surface Works & Ground Water",
+                    "Unknown"
+                ]
+            )
+
+        # ============================================================
+        # FINANCIAL INFORMATION
+        # ============================================================
+
+        st.subheader("🏦 Financial & Market Information")
+
+        col1, col2, col3 = st.columns(3)
+
+        with col1:
+
+            bank_account = st.selectbox(
+                "Bank Account",
+                ["Yes", "No"],
+                index=0
+            )
+
+            kcc = st.selectbox(
+                "KCC",
+                ["Yes", "No"],
+                index=0
+            )
+
+            loan_amount = st.number_input(
+                "Loan Amount (₹)",
+                min_value=0.0,
+                max_value=10000000.0,
+                value=0.0,
+                step=1000.0
+            )
+
+        with col2:
+
+            interest_rate = st.number_input(
+                "Interest Rate (%)",
+                min_value=0.0,
+                max_value=50.0,
+                value=7.0,
+                step=0.1
+            )
+
+            msp_awareness = st.selectbox(
+                "MSP Awareness",
+                ["Yes", "No"],
+                index=0
+            )
+
+            sold_at_msp = st.selectbox(
+                "Sold at MSP",
+                ["Yes", "No"],
+                index=1
+            )
+
+        with col3:
+
+            msp_sell_rate = st.number_input(
+                "MSP Sell Rate (₹)",
+                min_value=0.0,
+                max_value=100000.0,
+                value=0.0,
+                step=100.0
+            )
+
+            technical_advice = st.selectbox(
+                "Received Technical Advice",
+                ["Yes", "No"],
+                index=1
+            )
+
+            advice_adopted = st.selectbox(
+                "Adopted Technical Advice",
+                ["Yes", "No"],
+                index=1
+            )
+
+        # ============================================================
+        # AGRICULTURAL SUPPORT
+        # ============================================================
+
+        st.subheader("📋 Agricultural Support")
+
+        col1, col2, col3 = st.columns(3)
+
+        with col1:
+
+            crop_insured = st.selectbox(
+                "Crop Insured",
+                ["Yes", "No"],
+                index=1
+            )
+
+            soil_health_card = st.selectbox(
+                "Soil Health Card",
+                ["Yes", "No"],
+                index=1
+            )
+
+        with col2:
+
+            followed_soil_health_card = st.selectbox(
+                "Followed Soil Health Card",
+                ["Yes", "No"],
+                index=1
+            )
+
+            farmer_organization = st.selectbox(
+                "Farmer Organization",
+                ["Yes", "No"],
+                index=1
+            )
+
+        with col3:
+
+            st.metric(
+                "Land Area",
+                f"{p.get('total_land_ha', 5.0):.2f} ha"
+            )
+
+            st.metric(
+                "Current Crop",
+                p.get("current_crop", "Wheat")
+            )
+
+        # ============================================================
+        # PREDICTION
+        # ============================================================
+
+        if st.button(
+            "Predict Farm Value",
+            type="primary",
+            use_container_width=True
+        ):
+
+            with st.spinner("Running trained XGBoost model..."):
+
+                # ----------------------------------------------------
+                # MAP CURRENT APP VALUES TO NSS CATEGORIES
+                # ----------------------------------------------------
+
+                education_map = {
+                    "None": "Not Literate",
+                    "Primary": "Primary",
+                    "Secondary": "Secondary",
+                    "Graduate": "Graduate",
+                    "Postgraduate": "Post Graduate & Above"
+                }
+
+                education_nss = education_map.get(
+                    p.get("education_level", "Secondary"),
+                    "Secondary"
                 )
-                with st.expander("How was this calculated?"):
+
+                # Current crop -> NSS major crop category
+                crop_map = {
+                    "Wheat": "Cereals",
+                    "Rice": "Cereals",
+                    "Maize": "Cereals",
+                    "Bajra": "Cereals",
+                    "Jowar": "Cereals",
+                    "Barley": "Cereals",
+                    "Pulses": "Pulses",
+                    "Groundnut": "Oilseeds",
+                    "Mustard": "Oilseeds",
+                    "Cotton": "Fibres",
+                    "Sugarcane": "Sugar Crops",
+                    "Potato": "Tuber Crops",
+                    "Vegetables": "Vegetables",
+                    "Fruits": "Fruits",
+                    "Spices": "Condiments & Spices"
+                }
+
+                current_crop = p.get(
+                    "current_crop",
+                    "Wheat"
+                )
+
+                major_crop = crop_map.get(
+                    current_crop,
+                    "Cereals"
+                )
+
+                # ----------------------------------------------------
+                # BASIC VARIABLES
+                # ----------------------------------------------------
+
+                land_area = float(
+                    p.get("total_land_ha", 5.0)
+                )
+
+                age_value = float(
+                    p.get("age", 35)
+                )
+
+                # ----------------------------------------------------
+                # FEATURE ENGINEERING
+                # ----------------------------------------------------
+
+                land_safe = max(
+                    land_area,
+                    0.001
+                )
+
+                irrigation_intensity = (
+                    irrigated_area / land_safe
+                )
+
+                loan_per_ha = (
+                    loan_amount / land_safe
+                )
+
+                crops_per_ha = (
+                    crops_grown / land_safe
+                )
+
+                household_density = (
+                    household_size / land_safe
+                )
+
+                irrigated_share = (
+                    irrigated_area / land_safe
+                )
+
+                interest_burden = (
+                    loan_amount * interest_rate / 100
+                )
+
+                loan_land_interaction = (
+                    loan_amount * land_area
+                )
+
+                land_size_squared = (
+                    land_area ** 2
+                )
+
+                # ----------------------------------------------------
+                # CREATE MODEL INPUT
+                # ----------------------------------------------------
+
+                input_data = pd.DataFrame([{
+
+                    # Categorical
+                    "state": p.get(
+                        "region",
+                        "Punjab"
+                    ),
+
+                    "district": district,
+
+                    "gender": gender,
+
+                    "education": education_nss,
+
+                    "agri_training": 2,
+
+                    "Principal_Activity":
+                        principal_activity,
+
+                    "agricultural_land":
+                        agricultural_land,
+
+                    "major_crop":
+                        major_crop,
+
+                    "irrigated":
+                        irrigated,
+
+                    "irrigation_source":
+                        irrigation_source,
+
+                    "bank_account":
+                        bank_account,
+
+                    "kcc":
+                        kcc,
+
+                    "msp_awareness":
+                        msp_awareness,
+
+                    "sold_at_msp":
+                        sold_at_msp,
+
+                    "technical_advice":
+                        technical_advice,
+
+                    "advice_adopted":
+                        advice_adopted,
+
+                    "crop_insured":
+                        crop_insured,
+
+                    "soil_health_card":
+                        soil_health_card,
+
+                    "followed_soil_health_card":
+                        followed_soil_health_card,
+
+                    "farmer_organization":
+                        farmer_organization,
+
+                    # Numeric
+                    "age":
+                        age_value,
+
+                    "household_size":
+                        household_size,
+
+                    "land_area":
+                        land_area,
+
+                    "irrigated_area":
+                        irrigated_area,
+
+                    "crops_grown":
+                        crops_grown,
+
+                    "wages_salary":
+                        0.0,
+
+                    "land_rent_income":
+                        0.0,
+
+                    "nonfarm_net_income":
+                        float(
+                            p.get(
+                                "non_agri_income",
+                                12000
+                            )
+                        ) * 12,
+
+                    "loan_amount":
+                        loan_amount,
+
+                    "interest_rate":
+                        interest_rate,
+
+                    "irrigation_intensity":
+                        irrigation_intensity,
+
+                    "loan_per_ha":
+                        loan_per_ha,
+
+                    "crops_per_ha":
+                        crops_per_ha,
+
+                    "household_density":
+                        household_density,
+
+                    "irrigated_share":
+                        irrigated_share,
+
+                    "interest_burden":
+                        interest_burden,
+
+                    "loan_land_interaction":
+                        loan_land_interaction,
+
+                    "land_size_squared":
+                        land_size_squared,
+
+                    "msp_sell_rate":
+                        msp_sell_rate
+
+                }])
+
+                # ----------------------------------------------------
+                # PREDICT
+                # ----------------------------------------------------
+
+                predicted_value = farm_value_model.predict(
+                    input_data
+                )[0]
+
+                predicted_value = max(
+                    0,
+                    float(predicted_value)
+                )
+
+                st.session_state.farm_value_result = (
+                    predicted_value
+                )
+
+        # ============================================================
+        # DISPLAY RESULT
+        # ============================================================
+
+        if "farm_value_result" in st.session_state:
+
+            predicted_value = (
+                st.session_state.farm_value_result
+            )
+
+            st.success(
+                "Prediction generated successfully!"
+            )
+
+            st.markdown("---")
+
+            col1, col2 = st.columns([1.2, 1])
+
+            with col1:
+
+                st.metric(
+                    "Estimated Total Farm Value",
+                    f"₹ {predicted_value:,.0f}"
+                )
+
+                st.caption(
+                    "Prediction generated using the trained NSS-based XGBoost model."
+                )
+
+                with st.expander(
+                    "How is this prediction generated?"
+                ):
+
                     st.write(
-                        "Demo mode blends land size, crop yield, non-agricultural income, "
-                        "distance to market, and rainfall into one formula. Once the real "
-                        "income model is live, this will show actual feature contributions."
-                        if result["demo"]
-                        else "This is the trained model's live prediction based on your inputs."
+                        """
+                        The model was trained using NSS farmer-level
+                        agricultural data.
+
+                        It uses farmer demographics, land characteristics,
+                        irrigation, cropping patterns, financial access,
+                        MSP-related information, agricultural support
+                        and engineered features.
+
+                        The model then estimates the farmer's total
+                        agricultural farm value.
+                        """
                     )
-            with c2:
+
+            with col2:
+
+                # Simple model-quality indicator
+                # Based on our test-set R² ≈ 0.61
+                model_r2 = 0.61
+
                 gauge = go.Figure(
                     go.Indicator(
                         mode="gauge+number",
-                        value=result["confidence"] * 100,
+                        value=model_r2 * 100,
                         number={"suffix": "%"},
-                        title={"text": "Model Confidence"},
+                        title={
+                            "text": "Model R²"
+                        },
                         gauge={
-                            "axis": {"range": [0, 100]},
-                            "bar": {"color": "#22c55e"},
+                            "axis": {
+                                "range": [0, 100]
+                            },
+                            "bar": {
+                                "color": "#22c55e"
+                            },
                             "bgcolor": "#131b18",
                             "steps": [
-                                {"range": [0, 40], "color": "#2a1414"},
-                                {"range": [40, 70], "color": "#2a2414"},
-                                {"range": [70, 100], "color": "#14261a"},
-                            ],
-                        },
+                                {
+                                    "range": [0, 40],
+                                    "color": "#2a1414"
+                                },
+                                {
+                                    "range": [40, 70],
+                                    "color": "#2a2414"
+                                },
+                                {
+                                    "range": [70, 100],
+                                    "color": "#14261a"
+                                }
+                            ]
+                        }
                     )
                 )
-                gauge.update_layout(height=220, margin=dict(l=20, r=20, t=40, b=10), paper_bgcolor="rgba(0,0,0,0)", font_color="#e8f0ec")
-                st.plotly_chart(gauge, use_container_width=True)
 
+                gauge.update_layout(
+                    height=220,
+                    margin=dict(
+                        l=20,
+                        r=20,
+                        t=40,
+                        b=10
+                    ),
+                    paper_bgcolor="rgba(0,0,0,0)",
+                    font_color="#e8f0ec"
+                )
+
+                st.plotly_chart(
+                    gauge,
+                    use_container_width=True
+                )
 # ----------------------------------------------------------------------
 # 3. Crop Recommendation
 # ----------------------------------------------------------------------
