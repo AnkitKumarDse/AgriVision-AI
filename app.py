@@ -326,22 +326,23 @@ tabs = st.tabs(
 # ----------------------------------------------------------------------
 @st.cache_data(ttl=1800)
 def fetch_agri_news():
-    """Live headlines if NEWSAPI_KEY is set in secrets, else None
-    (caller falls back to a clearly-labeled static sample)."""
-    api_key = st.secrets.get("NEWSAPI_KEY", None)
-    if not api_key:
-        return None
+    """Fetches live Indian agricultural news via RSS (No API Key Required)."""
+    rss_url = "https://news.google.com/rss/search?q=India+agriculture&hl=en-IN&gl=IN&ceid=IN:en"
     try:
-        resp = requests.get(
-            "https://newsapi.org/v2/everything",
-            params={"q": "India agriculture", "language": "en", "sortBy": "publishedAt", "pageSize": 5, "apiKey": api_key},
-            timeout=8,
-        )
-        if resp.status_code != 200:
-            return None
-        articles = resp.json().get("articles", [])
-        return [{"title": a["title"], "source": a["source"]["name"], "url": a["url"]} for a in articles[:5]]
-    except requests.RequestException:
+        feed = feedparser.parse(rss_url)
+        articles = []
+        for entry in feed.entries[:5]:
+            articles.append(
+                {
+                    "title": entry.title,
+                    "source": getattr(entry, "source", {}).get(
+                        "title", "Google News"
+                    ),
+                    "url": entry.link,
+                }
+            )
+        return articles if articles else None
+    except Exception:
         return None
 
 
