@@ -102,7 +102,7 @@ st.markdown(
         background: linear-gradient(100deg, #ffffff 10%, #4ade80 45%, #22d3ee 70%, #facc15 100%);
         -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
     }
-    .av-hero p.sub { color: #a9bdb2; font-size: clamp(1rem, 1.6vw, 1.25rem); margin: 0 auto 1.8rem auto; max-width: 640px; }
+    .av-hero p.sub { color: #a9bdb2; font-size: clamp(1.1rem, 1.8vw, 1.4rem); margin: 0 auto 1.8rem auto; max-width: 640px; font-weight: 600; }
 
     .av-status-row { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
     .av-status-pill {
@@ -234,7 +234,7 @@ def render_hero():
             <div class="av-hero-inner">
                 <div class="av-badge"><span class="dot"></span> LIVE AI FARM INTELLIGENCE PLATFORM</div>
                 <h1>AgriVision AI</h1>
-                <p class="sub">One connected pipeline -- your profile, live weather, crop science, yield forecasting and farm valuation all feed into a single real-time picture of the farm.</p>
+                <p class="sub">Cultivating Data. Harvesting Growth.</p>
                 <div class="av-status-row">{pills}</div>
             </div>
         </div>
