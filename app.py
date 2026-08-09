@@ -472,7 +472,7 @@ with tabs[1]:
 # ----------------------------------------------------------------------
 # 2. Weather Intelligence
 # ----------------------------------------------------------------------
-WEATHER_API_KEY = st.secrets.get("fc99d46057bc6a25799d7a0577685b63", None)
+WEATHER_API_KEY = st.secrets.get("WEATHER_API_KEY", None)
 
 
 def get_weather(city):
