@@ -181,6 +181,13 @@ st.markdown(
     .kpi-card .kpi-value { font-size: 1.85rem; font-weight: 800; color: white; margin-top: 8px; }
     .kpi-card .kpi-sub { font-size: 0.78rem; color: rgba(255,255,255,0.65); margin-top: 4px; }
 
+/* Hide Streamlit Sidebar Completely */
+    section[data-testid="stSidebar"] {
+        display: none !important;
+    }
+    button[data-testid="baseButton-headerNoPadding"] {
+        display: none !important;
+    }
     /* ---------------- Floating AI-assistant bubble ---------------- */
     div[data-testid="stPopover"] {
         position: fixed !important; top: 58%; left: 26px; margin-top: -34px;
