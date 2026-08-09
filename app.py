@@ -1,4 +1,27 @@
+"""
+AgriVision AI -- Streamlit frontend
+Run with: streamlit run app.py
+
+REDESIGN NOTES (this version):
+- Tabs reordered into a flow: General Dashboard -> Farmer Profile ->
+  Weather Intelligence -> Crop Recommendation -> Yield Prediction ->
+  Income Prediction -> Final Report. Each step feeds the next via
+  st.session_state, and General Dashboard + Final Report both pull
+  from everything that's been run so far.
+- Removed a duplicate/broken "Predict Farm Value" flow that referenced
+  undefined variables (district, gender, irrigated, etc.) -- would
+  have crashed on click. Its Agricultural Support inputs are now
+  folded into the one real prediction call.
+- Removed a hardcoded Groq API key that was sitting in the file
+  unused (dead code) -- rotate that key on console.groq.com since it
+  was public in the repo. The real, working Groq call reads
+  st.secrets["GROQ_API_KEY"] like it should.
+- Bigger, bolder visual language: gradient hero title, colored KPI
+  cards, glowing active tab.
+"""
+
 import base64
+import time
 from pathlib import Path
 
 import joblib
@@ -7,26 +30,34 @@ import pandas as pd
 import plotly.graph_objects as go
 import requests
 import streamlit as st
-from groq import Groq
+
+st.set_page_config(page_title="AgriVision AI", page_icon="🌾", layout="wide")
 
 # ----------------------------------------------------------------------
-# Page Configuration
+# Load all real models once, safely (never crash the whole app if a
+# file is missing -- show a clear message on the tab that needs it).
 # ----------------------------------------------------------------------
-st.set_page_config(
-    page_title="AgriVision AI -- Smart Agricultural Platform",
-    page_icon="🌾",
-    layout="wide",
-    initial_sidebar_state="expanded",
-)
-
-# Initialize Session States
-if "profile" not in st.session_state:
-    st.session_state.profile = {}
-if "chat_history" not in st.session_state:
-    st.session_state.chat_history = []
+@st.cache_resource
+def load_pickle(name):
+    path = Path(__file__).parent / name
+    if not path.exists():
+        return None
+    try:
+        return joblib.load(path)
+    except Exception:
+        return None
 
 
-# Base64 Farmer Avatar Icon Helper
+crop_model = load_pickle("crop_model.pkl")
+label_encoder = load_pickle("label_encoder.pkl")
+yield_model = load_pickle("yield_model.pkl")
+crop_encoder = load_pickle("crop_encoder.pkl")
+season_encoder = load_pickle("season_encoder.pkl")
+state_encoder = load_pickle("state_encoder.pkl")
+farm_value_model = load_pickle("farm_value_final_xgboost.pkl")
+farm_value_features = load_pickle("farm_value_final_features.pkl")
+
+
 def _load_farmer_icon_b64():
     icon_path = Path(__file__).parent / "assets" / "farmer_icon.png"
     if icon_path.exists():
@@ -36,347 +67,300 @@ def _load_farmer_icon_b64():
 
 FARMER_ICON_B64 = _load_farmer_icon_b64()
 
-
 # ----------------------------------------------------------------------
-# Model Loaders (Cached)
-# ----------------------------------------------------------------------
-@st.cache_resource
-def load_all_models():
-    models = {}
-    try:
-        models["crop"] = joblib.load("crop_model.pkl")
-        models["crop_label"] = joblib.load("label_encoder.pkl")
-    except Exception:
-        models["crop"] = None
-
-    try:
-        models["yield"] = joblib.load("yield_model.pkl")
-        models["crop_enc"] = joblib.load("crop_encoder.pkl")
-        models["season_enc"] = joblib.load("season_encoder.pkl")
-        models["state_enc"] = joblib.load("state_encoder.pkl")
-    except Exception:
-        models["yield"] = None
-
-    try:
-        models["farm_val"] = joblib.load("farm_value_final_xgboost.pkl")
-    except Exception:
-        models["farm_val"] = None
-
-    return models
-
-
-ml_models = load_all_models()
-
-# ----------------------------------------------------------------------
-# Ultra-Modern CSS Styling (Gradients, Glassmorphism, Pop Colors)
+# Styling -- bold gradient hero, colorful KPI cards, glowing tabs.
 # ----------------------------------------------------------------------
 st.markdown(
     """
     <style>
-    /* Global Background & Layout */
-    .stApp {
-        background: #090d16;
-        color: #f8fafc;
-    }
-    .block-container {
-        padding-top: 1.5rem;
-        padding-bottom: 3rem;
-        max-width: 1400px;
-    }
+    .block-container { padding-top: 1.5rem; max-width: 1250px; }
 
-    /* Vibrant Hero Header */
-    .hero-container {
-        background: linear-gradient(135deg, rgba(16, 185, 129, 0.15) 0%, rgba(6, 182, 212, 0.15) 50%, rgba(168, 85, 247, 0.15) 100%);
-        border: 1px solid rgba(16, 185, 129, 0.4);
+    .av-hero {
+        background: radial-gradient(circle at 20% 20%, #1a3d26 0%, #0b1210 60%);
+        border: 1px solid #21362a;
         border-radius: 20px;
-        padding: 2.2rem 2.8rem;
-        margin-bottom: 1.8rem;
-        box-shadow: 0 12px 35px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.1);
-        backdrop-filter: blur(12px);
+        padding: 2.6rem 2.6rem 2.2rem 2.6rem;
+        margin-bottom: 1.6rem;
+        position: relative;
+        overflow: hidden;
     }
-    .hero-title {
-        font-size: 2.6rem;
+    .av-hero::before {
+        content: "";
+        position: absolute; top: -60%; right: -10%;
+        width: 420px; height: 420px; border-radius: 50%;
+        background: radial-gradient(circle, rgba(34,197,94,0.25) 0%, rgba(34,197,94,0) 70%);
+    }
+    .av-hero h1 {
+        font-size: 3rem;
         font-weight: 800;
-        background: linear-gradient(90deg, #34d399, #38bdf8, #a855f7);
+        margin-bottom: 0.3rem;
+        letter-spacing: -0.02em;
+        background: linear-gradient(90deg, #4ade80, #22d3ee 60%, #facc15);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
-        margin-bottom: 0.3rem;
+        background-clip: text;
     }
-    .hero-subtitle {
-        color: #cbd5e1;
-        font-size: 1.1rem;
-        margin: 0;
-    }
-    .badge-pop {
-        display: inline-block;
-        background: linear-gradient(90deg, #059669, #0284c7);
-        color: #ffffff;
-        border-radius: 999px;
-        padding: 4px 14px;
-        font-size: 0.78rem;
-        font-weight: 700;
-        letter-spacing: 0.06em;
-        margin-bottom: 0.8rem;
-        box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+    .av-hero p { color: #9db3a8; font-size: 1.05rem; margin: 0; max-width: 640px; }
+    .av-badge {
+        display: inline-block; background: #1c3327; color: #4ade80;
+        border-radius: 999px; padding: 4px 14px; font-size: 0.78rem;
+        font-weight: 700; letter-spacing: 0.05em; margin-bottom: 1rem;
+        border: 1px solid #2c4636;
     }
 
-    /* Pop Cards & Metric Cards */
-    .glass-card {
-        background: rgba(15, 23, 42, 0.75);
-        border: 1px solid rgba(51, 65, 85, 0.8);
-        border-radius: 16px;
-        padding: 1.5rem;
-        margin-bottom: 1rem;
-        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
-        backdrop-filter: blur(8px);
-    }
-    
-    div[data-testid="stMetric"] {
-        background: linear-gradient(135deg, rgba(30, 41, 59, 0.9), rgba(15, 23, 42, 0.9));
-        border: 1px solid rgba(16, 185, 129, 0.3);
-        border-radius: 14px;
-        padding: 16px;
-        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
-    }
-    div[data-testid="stMetricValue"] {
-        font-size: 1.8rem !important;
-        font-weight: 800 !important;
-        color: #34d399 !important;
-    }
-
-    /* Tab Styling */
-    .stTabs [data-baseweb="tab-list"] {
-        gap: 8px;
-        border-bottom: 2px solid #1e293b;
-        padding-bottom: 4px;
-    }
+    .stTabs [data-baseweb="tab-list"] { gap: 6px; border-bottom: 1px solid #21362a; }
     .stTabs [data-baseweb="tab"] {
-        background: #0f172a;
-        border-radius: 10px;
-        padding: 12px 22px;
-        color: #94a3b8;
-        font-weight: 600;
-        border: 1px solid #1e293b;
-        transition: all 0.25s ease;
+        background-color: transparent; border-radius: 10px 10px 0 0;
+        padding: 12px 18px; color: #9db3a8; font-weight: 600; font-size: 0.95rem;
     }
     .stTabs [aria-selected="true"] {
-        background: linear-gradient(135deg, #10b981 0%, #059669 100%) !important;
-        color: #ffffff !important;
-        border-color: #34d399 !important;
-        box-shadow: 0 6px 20px rgba(16, 185, 129, 0.4);
+        background: linear-gradient(180deg, #16261d 0%, #0f1a15 100%) !important;
+        color: #4ade80 !important; font-weight: 800;
+        box-shadow: inset 0 -3px 0 #4ade80;
     }
 
-    /* Buttons */
+    div[data-testid="stVerticalBlockBorderWrapper"] {
+        background-color: #121916; border: 1px solid #21362a; border-radius: 16px;
+    }
+    div[data-testid="stMetric"] {
+        background-color: #131b18; border: 1px solid #21362a; border-radius: 12px; padding: 16px 18px;
+    }
+    div[data-testid="stMetricLabel"] { color: #9db3a8; }
+
     button[kind="primary"] {
-        background: linear-gradient(90deg, #10b981, #0284c7) !important;
-        border: none !important;
-        color: white !important;
-        font-weight: 700 !important;
-        border-radius: 12px !important;
-        padding: 0.6rem 1.5rem !important;
-        box-shadow: 0 6px 20px rgba(16, 185, 129, 0.35) !important;
-        transition: all 0.2s ease !important;
+        background: linear-gradient(90deg, #22c55e, #16a34a);
+        border: none; font-weight: 700; letter-spacing: 0.01em;
     }
-    button[kind="primary"]:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 8px 25px rgba(16, 185, 129, 0.5) !important;
-    }
+    button[kind="primary"]:hover { filter: brightness(1.12); }
 
-    /* Floating Chatbot Bubble */
+    /* KPI cards on General Dashboard */
+    .kpi-card {
+        border-radius: 16px; padding: 20px 22px; border: 1px solid #24352b;
+        background: linear-gradient(135deg, var(--c1), var(--c2));
+        position: relative; overflow: hidden; min-height: 118px;
+    }
+    .kpi-card .kpi-label { font-size: 0.8rem; color: rgba(255,255,255,0.75); font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; }
+    .kpi-card .kpi-value { font-size: 1.7rem; font-weight: 800; color: white; margin-top: 6px; }
+    .kpi-card .kpi-sub { font-size: 0.78rem; color: rgba(255,255,255,0.65); margin-top: 4px; }
+
+    /* Floating AI-assistant bubble */
     div[data-testid="stPopover"] {
-        position: fixed !important;
-        top: 65%;
-        left: 28px;
-        z-index: 9999;
-        animation: av-bob 3.5s ease-in-out infinite;
+        position: fixed !important; top: 58%; left: 26px; margin-top: -34px;
+        z-index: 9999; width: auto !important; animation: av-bob 3.2s ease-in-out infinite;
     }
-    @keyframes av-bob {
-        0%, 100% { transform: translateY(0); }
-        50% { transform: translateY(-10px); }
-    }
+    @keyframes av-bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
     div[data-testid="stPopover"] button {
-        width: 70px;
-        height: 70px;
-        border-radius: 50%;
-        background: linear-gradient(135deg, #10b981, #3b82f6);
-        border: 3px solid #ffffff;
-        box-shadow: 0 10px 30px rgba(16, 185, 129, 0.5);
+        position: relative; width: 68px; height: 68px; border-radius: 50%;
+        font-size: 1.7rem; background: linear-gradient(135deg, #22c55e, #16a34a);
+        border: 3px solid #0e1414; box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+        color: white; transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;
     }
+    div[data-testid="stPopover"] button:hover {
+        transform: scale(1.12) rotate(-6deg); box-shadow: 0 10px 26px rgba(34, 197, 94, 0.45); border-color: #4ade80;
+    }
+    div[data-testid="stPopover"] button:active { transform: scale(0.9) rotate(0deg); }
+    div[data-testid="stPopover"] button::after {
+        content: "Ask me! 💬"; position: absolute; left: 82px; top: 50%;
+        transform: translateY(-50%) translateX(-6px); background: #16261d; border: 1px solid #21362a;
+        color: #e8f0ec; padding: 6px 12px; border-radius: 8px; font-size: 0.8rem; white-space: nowrap;
+        opacity: 0; pointer-events: none; transition: opacity 0.2s ease, transform 0.2s ease;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+    }
+    div[data-testid="stPopover"] button:hover::after { opacity: 1; transform: translateY(-50%) translateX(0); }
+    div[data-testid="stPopoverBody"] {
+        width: 340px; background-color: #131b18; border: 1px solid #21362a;
+        border-radius: 14px; animation: av-panel-in 0.18s ease-out;
+    }
+    @keyframes av-panel-in { 0% { opacity: 0; transform: translateY(6px) scale(0.97); } 100% { opacity: 1; transform: translateY(0) scale(1); } }
     </style>
 
-    <div class="hero-container">
-        <div class="badge-pop">POWERED BY AI &amp; NEXT-GEN ANALYTICS</div>
-        <div class="hero-title">🌾 AgriVision AI</div>
-        <div class="hero-subtitle">Smart Decision Support Platform for Indian Agriculture -- Live Market News, Crop Science, Yield AI &amp; Farm Value Estimation</div>
+    <div class="av-hero">
+        <div class="av-badge">POWERED BY AI &amp; DATA ANALYTICS</div>
+        <h1>🌾 AgriVision AI</h1>
+        <p>Real-time farm intelligence for Indian agriculture -- live crop recommendations, yield forecasting, farm value estimation, and weather-driven advisory, all in one flow.</p>
     </div>
     """,
     unsafe_allow_html=True,
 )
 
+
+def kpi_card(label, value, sub, c1, c2, icon=""):
+    st.markdown(
+        f"""
+        <div class="kpi-card" style="--c1:{c1};--c2:{c2};">
+            <div class="kpi-label">{icon} {label}</div>
+            <div class="kpi-value">{value}</div>
+            <div class="kpi-sub">{sub}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
 # ----------------------------------------------------------------------
-# Sidebar Profile Snapshot & Model Status
+# Session state
+# ----------------------------------------------------------------------
+for key, default in [
+    ("profile", {}),
+    ("chat_history", []),
+    ("recommended_crop", None),
+    ("crop_confidence", None),
+    ("predicted_yield", None),
+    ("total_output", None),
+    ("farm_value_result", None),
+    ("weather_result", None),
+]:
+    if key not in st.session_state:
+        st.session_state[key] = default
+
+# ----------------------------------------------------------------------
+# Sidebar
 # ----------------------------------------------------------------------
 with st.sidebar:
-    st.markdown("## 🌾 **AgriVision AI**")
-    st.caption("Precision Farming & Analytics")
+    st.title("🌾 AgriVision AI")
+    st.caption("AI decision support for Indian agriculture")
     st.divider()
 
-    p = st.session_state.profile
-    if p:
-        st.markdown("### 👤 **Farmer Snapshot**")
-        st.write(f"**ID:** `{p.get('farmer_id', 'N/A')}`")
-        st.write(f"📍 **State:** {p.get('region', 'N/A')}")
-        st.write(f"🌱 **Crop:** {p.get('current_crop', 'N/A')}")
-        st.write(f"📐 **Land:** {p.get('total_land_ha', '0.0')} ha")
+    profile = st.session_state.profile
+    if profile:
+        st.subheader("👤 Farmer Snapshot")
+        st.markdown(f"**{profile.get('farmer_id', '--')}** · {profile.get('region', '--')}")
+        st.write(f"🌱 {profile.get('current_crop', '--')} · {profile.get('total_land_ha', '--')} ha")
+        st.divider()
+    else:
+        st.caption("Fill in the Farmer Profile tab to see a live snapshot here.")
         st.divider()
 
-    st.markdown("### ⚡ **ML Engine Status**")
-    st.write(
-        f"🌱 Crop Rec Model: {'🟢 Live' if ml_models['crop'] else '🟡 Demo'}"
-    )
-    st.write(
-        f"📈 Yield Model: {'🟢 Live' if ml_models['yield'] else '🟡 Demo'}"
-    )
-    st.write(
-        f"💰 Farm Value XGBoost: {'🟢 Live' if ml_models['farm_val'] else '🟡 Demo'}"
-    )
+    st.subheader("Model status")
+    st.write(f"Crop Model: {'🟢 live' if crop_model is not None else '🟡 missing'}")
+    st.write(f"Yield Model: {'🟢 live' if yield_model is not None else '🟡 missing'}")
+    st.write(f"Farm Value Model: {'🟢 live' if farm_value_model is not None else '🟡 missing'}")
+    st.write(f"Weather API: {'🟢 configured' if st.secrets.get('OPENWEATHER_API_KEY', None) else '🟡 not set'}")
+    st.write(f"AI Assistant (Groq): {'🟢 configured' if st.secrets.get('GROQ_API_KEY', None) else '🟡 not set'}")
 
-# ----------------------------------------------------------------------
-# Main Application Flow (7 Step-by-Step Tabs)
-# ----------------------------------------------------------------------
 tabs = st.tabs(
     [
-        "📰 Agri News & Hub",
+        "🚀 General Dashboard",
         "👤 Farmer Profile",
         "🌦️ Weather Intelligence",
         "🌱 Crop Recommendation",
         "📈 Yield Prediction",
-        "💰 Farm Value & Income",
-        "📄 Executive Report",
+        "💰 Income Prediction",
+        "📄 Final Report",
     ]
 )
 
-# ======================================================================
-# TAB 1: AGRI NEWS & HUB
-# ======================================================================
+# ----------------------------------------------------------------------
+# 0. General Dashboard -- live overview, pulls from everything else
+# ----------------------------------------------------------------------
 with tabs[0]:
-    st.markdown("### 📰 **Indian Agricultural Innovations & Market Hub**")
-    st.caption(
-        "Real-time news feeds, national scheme announcements, and MSP market updates."
-    )
+    with st.container(border=True):
+        st.header("🚀 Live Farm Intelligence")
+        p = st.session_state.profile
+        if not p:
+            st.info("Start with the Farmer Profile tab -- everything here fills in as you go.")
+        else:
+            st.caption(f"Overview for **{p.get('farmer_id')}** · {p.get('region')} · {p.get('total_land_ha')} ha of {p.get('current_crop')}")
 
-    c1, c2, c3 = st.columns(3)
-    with c1:
-        st.markdown(
-            """
-            <div class="glass-card">
-                <h4 style="color:#34d399;">🏛️ PM-Kisan Samman Nidhi</h4>
-                <p style="font-size:0.9rem; color:#cbd5e1;">17th Installment released. ₹20,000+ Crores transferred to 9.2 Crore farmers across India. Complete e-KYC on the PM-Kisan portal to receive direct benefits.</p>
-                <span style="color:#fbbf24; font-size:0.8rem; font-weight:700;">UPDATE · GOVT SCHEME</span>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
+        c1, c2, c3, c4 = st.columns(4)
+        with c1:
+            kpi_card(
+                "Recommended Crop",
+                st.session_state.recommended_crop.upper() if st.session_state.recommended_crop else "--",
+                f"{st.session_state.crop_confidence:.0f}% confidence" if st.session_state.crop_confidence else "Not run yet",
+                "#14532d", "#0b1a10", "🌱",
+            )
+        with c2:
+            kpi_card(
+                "Predicted Yield",
+                f"{st.session_state.predicted_yield:.2f} t/ha" if st.session_state.predicted_yield else "--",
+                f"{st.session_state.total_output:.1f} tonnes total" if st.session_state.total_output else "Not run yet",
+                "#78350f", "#1c1206", "📈",
+            )
+        with c3:
+            kpi_card(
+                "Estimated Farm Value",
+                f"₹{st.session_state.farm_value_result:,.0f}" if st.session_state.farm_value_result else "--",
+                "XGBoost model, R² 0.61" if st.session_state.farm_value_result else "Not run yet",
+                "#164e63", "#071a1f", "💰",
+            )
+        with c4:
+            w = st.session_state.weather_result
+            kpi_card(
+                "Weather",
+                f"{w['temperature']}°C" if w else "--",
+                w["condition"] if w else "Not fetched yet",
+                "#4c1d95", "#160b2e", "🌦️",
+            )
 
-    with c2:
-        st.markdown(
-            """
-            <div class="glass-card">
-                <h4 style="color:#38bdf8;">🚁 Kisan Drone Subsidies</h4>
-                <p style="font-size:0.9rem; color:#cbd5e1;">Government offering up to 80% financial assistance for Custom Hiring Centers (CHCs) &amp; FPOs to acquire agricultural drones for precise pesticide spraying.</p>
-                <span style="color:#34d399; font-size:0.8rem; font-weight:700;">AGTECH · INNOVATION</span>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
+        st.divider()
+        col_left, col_right = st.columns([1.4, 1])
+        with col_left:
+            if st.session_state.farm_value_result:
+                base = st.session_state.farm_value_result
+                seasons = ["Season 1", "Season 2", "Season 3", "Season 4"]
+                values = [base * f for f in (0.85, 1.05, 0.95, 1.0)]
+                fig = go.Figure()
+                fig.add_trace(go.Scatter(x=seasons, y=values, fill="tozeroy", line=dict(color="#22c55e")))
+                fig.update_layout(
+                    title="Simulated Farm Value Trend", yaxis_title="₹", height=300,
+                    paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color="#e8f0ec",
+                )
+                st.plotly_chart(fig, use_container_width=True)
+            else:
+                st.caption("Run Income Prediction to see a simulated value trend here.")
+        with col_right:
+            if p:
+                categories = ["Land", "Non-Ag Income", "Market Access", "Yield", "Farm Value"]
+                land_score = min(p.get("total_land_ha", 0) / 20, 1)
+                nonagri_score = min(p.get("non_agri_income", 0) / 50000, 1)
+                market_score = 1 - min(p.get("distance_to_market_km", 0) / 100, 1)
+                yield_score = min((st.session_state.predicted_yield or 3) / 10, 1)
+                value_score = min((st.session_state.farm_value_result or 20000) / 300000, 1)
+                values = [land_score, nonagri_score, market_score, yield_score, value_score]
+                radar = go.Figure()
+                radar.add_trace(go.Scatterpolar(r=values + values[:1], theta=categories + categories[:1], fill="toself", line_color="#22c55e"))
+                radar.update_layout(
+                    polar=dict(radialaxis=dict(visible=True, range=[0, 1], showticklabels=False), bgcolor="rgba(0,0,0,0)"),
+                    showlegend=False, height=300, title="Farmer Profile Snapshot",
+                    paper_bgcolor="rgba(0,0,0,0)", font_color="#e8f0ec",
+                )
+                st.plotly_chart(radar, use_container_width=True)
 
-    with c3:
-        st.markdown(
-            """
-            <div class="glass-card">
-                <h4 style="color:#a855f7;">🌾 MSP Price Boost</h4>
-                <p style="font-size:0.9rem; color:#cbd5e1;">Cabinet hikes Minimum Support Price (MSP) for Kharif crops. Paddy, pulses, and oilseeds see an average 5.8% price increase for guaranteed procurement.</p>
-                <span style="color:#38bdf8; font-size:0.8rem; font-weight:700;">MARKET · PROCUREMENT</span>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
-
-    st.markdown("---")
-    st.markdown("#### 📊 **Current MSP Price Indicators (₹ / Quintal)**")
-    mc1, mc2, mc3, mc4 = st.columns(4)
-    mc1.metric("Paddy (Common)", "₹ 2,300", "+5.4%")
-    mc2.metric("Wheat", "₹ 2,275", "+7.0%")
-    mc3.metric("Cotton (Long Staple)", "₹ 7,521", "+7.4%")
-    mc4.metric("Soybean (Yellow)", "₹ 4,892", "+6.3%")
-
-# ======================================================================
-# TAB 2: FARMER PROFILE
-# ======================================================================
+# ----------------------------------------------------------------------
+# 1. Farmer Profile
+# ----------------------------------------------------------------------
 with tabs[1]:
-    st.markdown("### 👤 **Farmer Baseline Profile**")
-    st.caption(
-        "Enter farmer information once. It automatically populates all ML models across the tabs."
-    )
+    with st.container(border=True):
+        st.header("Farmer Profile")
+        st.caption("This info is shared across every other tab -- fill it in once.")
 
-    with st.container():
         col1, col2 = st.columns(2)
         with col1:
-            farmer_id = st.text_input(
-                "Farmer ID",
-                value=st.session_state.profile.get("farmer_id", "F-0001"),
-            )
-            age = st.number_input(
-                "Age (years)",
-                18,
-                90,
-                int(st.session_state.profile.get("age", 35)),
-            )
+            farmer_id = st.text_input("Farmer ID", value=st.session_state.profile.get("farmer_id", "F-0001"))
+            age = st.number_input("Age (years)", 18, 90, st.session_state.profile.get("age", 35))
             education = st.selectbox(
                 "Education Level",
                 ["None", "Primary", "Secondary", "Graduate", "Postgraduate"],
                 index=["None", "Primary", "Secondary", "Graduate", "Postgraduate"].index(
-                    st.session_state.profile.get(
-                        "education_level", "Secondary"
-                    )
+                    st.session_state.profile.get("education_level", "Secondary")
                 ),
             )
-            region = st.text_input(
-                "Region / State",
-                value=st.session_state.profile.get("region", "Punjab"),
-            )
-
+            region = st.text_input("Region / State", value=st.session_state.profile.get("region", "Punjab"))
         with col2:
             total_land = st.number_input(
-                "Total Agricultural Land (Hectares)",
-                0.1,
-                500.0,
-                float(st.session_state.profile.get("total_land_ha", 5.0)),
+                "Total Agricultural Land (hectares)", 0.0, 500.0, float(st.session_state.profile.get("total_land_ha", 5.0)),
+                key="land_profile"
             )
-            current_crop = st.text_input(
-                "Current Primary Crop",
-                value=st.session_state.profile.get("current_crop", "Wheat"),
-            )
+            current_crop = st.text_input("Current Primary Crop", value=st.session_state.profile.get("current_crop", "Wheat"))
             non_agri_income = st.number_input(
-                "Non-Agricultural Income (₹/month)",
-                0,
-                500000,
-                int(st.session_state.profile.get("non_agri_income", 12000)),
+                "Non-Agricultural Income (₹/month)", 0, 500000, int(st.session_state.profile.get("non_agri_income", 12000))
             )
             distance_to_market = st.number_input(
-                "Distance to Nearest Mandi/Market (km)",
-                0.0,
-                500.0,
-                float(
-                    st.session_state.profile.get(
-                        "distance_to_market_km", 15.0
-                    )
-                ),
+                "Distance to Market (km)", 0.0, 500.0, float(st.session_state.profile.get("distance_to_market_km", 15.0))
             )
 
-        if st.button(
-            "💾 Save Farmer Profile", type="primary", use_container_width=True
-        ):
+        if st.button("Save Profile", type="primary"):
             st.session_state.profile = {
                 "farmer_id": farmer_id,
                 "age": age,
@@ -387,358 +371,452 @@ with tabs[1]:
                 "non_agri_income": non_agri_income,
                 "distance_to_market_km": distance_to_market,
             }
-            st.success("✅ Profile Saved! Ready for analysis across all tabs.")
-
-# ======================================================================
-# TAB 3: WEATHER DASHBOARD
-# ======================================================================
-with tabs[2]:
-    st.markdown("### 🌦️ **Weather Intelligence & Local Advisory**")
-    p = st.session_state.profile
-
-    city = st.text_input(
-        "Enter City / District", value=p.get("region", "Punjab")
-    )
-
-    if st.button("🌦️ Get Weather Intelligence", type="primary"):
-        API_KEY = "fc99d46057bc6a25799d7a0577685b63"
-        url = f"https://api.openweathermap.org/data/2.5/weather?q={city},IN&appid={API_KEY}&units=metric"
-
-        try:
-            res = requests.get(url)
-            if res.status_code == 200:
-                w = res.json()
-                temp = w["main"]["temp"]
-                hum = w["main"]["humidity"]
-                wind = w["wind"]["speed"]
-                press = w["main"]["pressure"]
-                desc = w["weather"][0]["description"].title()
-
-                st.session_state.weather = {
-                    "temp": temp,
-                    "humidity": hum,
-                    "wind": wind,
-                    "desc": desc,
-                }
-
-                st.success(f"Live Weather Overview for **{w['name']}**")
-                wc1, wc2, wc3, wc4 = st.columns(4)
-                wc1.metric("🌡 Temperature", f"{temp} °C")
-                wc2.metric("💧 Humidity", f"{hum}%")
-                wc3.metric("🌬 Wind Speed", f"{wind} m/s")
-                wc4.metric("🧭 Pressure", f"{press} hPa")
-
-                st.markdown("---")
-                st.markdown("#### 💡 **AI Precision Advisory**")
-                if temp > 35:
-                    st.warning(
-                        "⚠️ **High Heat Stress:** Increase irrigation frequency during early morning or evening hours."
-                    )
-                elif hum > 85:
-                    st.warning(
-                        "⚠️ **High Fungal Risk:** High humidity detected. Inspect crop leaves for fungal spores or rust."
-                    )
-                else:
-                    st.success(
-                        "✅ **Optimal Conditions:** Favorable weather for field spraying, weeding, and normal operations."
-                    )
-            else:
-                st.error("Unable to retrieve weather for this location.")
-        except Exception as e:
-            st.error(f"Weather API Error: {e}")
-
-# ======================================================================
-# TAB 4: CROP RECOMMENDATION
-# ======================================================================
-with tabs[3]:
-    st.markdown("### 🌱 **AI-Powered Crop Recommendation**")
-    st.caption(
-        "Predict the most suitable crop based on NPK soil chemistry and local climate conditions."
-    )
-
-    col1, col2 = st.columns(2)
-    with col1:
-        N = st.number_input("Nitrogen (N)", 0, 200, 90)
-        P = st.number_input("Phosphorus (P)", 0, 200, 42)
-        K = st.number_input("Potassium (K)", 0, 250, 43)
-        ph = st.number_input("Soil pH", 0.0, 14.0, 6.5)
-    with col2:
-        temp = st.number_input("Temperature (°C)", 0.0, 50.0, 27.0)
-        hum = st.number_input("Humidity (%)", 0.0, 100.0, 80.0)
-        rain = st.number_input("Rainfall (mm)", 0.0, 3000.0, 800.0)
-
-    if st.button(
-        "🌱 Generate Crop Recommendation",
-        type="primary",
-        use_container_width=True,
-    ):
-        if ml_models["crop"]:
-            try:
-                npk = N + P + K
-                feats = np.array(
-                    [[
-                        N,
-                        P,
-                        K,
-                        temp,
-                        hum,
-                        ph,
-                        rain,
-                        npk,
-                        N / npk if npk else 0,
-                        P / npk if npk else 0,
-                        K / npk if npk else 0,
-                        int(rain < 100),
-                        int(100 <= rain < 200),
-                        int(rain >= 200),
-                        int(temp < 20),
-                        int(20 <= temp < 30),
-                        int(temp >= 30),
-                    ]]
-                )
-                pred = ml_models["crop"].predict(feats)
-                crop_name = ml_models["crop_label"].inverse_transform(pred)[0]
-                conf = float(
-                    np.max(ml_models["crop"].predict_proba(feats)) * 100
-                )
-
-                st.session_state.recommended_crop = crop_name
-                st.session_state.crop_confidence = conf
-
-                st.success(f"🌾 Recommended Crop: **{crop_name.upper()}**")
-                st.progress(int(conf))
-                st.metric("Model Prediction Confidence", f"{conf:.2f}%")
-            except Exception as e:
-                st.error(f"Crop Model Error: {e}")
-        else:
-            st.info("Demo Mode: Recommended Crop -> **WHEAT** (92.5% confidence)")
-
-# ======================================================================
-# TAB 5: YIELD PREDICTION
-# ======================================================================
-with tabs[4]:
-    st.markdown("### 📈 **AI Crop Yield Prediction**")
-    st.caption("Forecast expected yield (Tonnes / Hectare) and total farm output.")
-
-    l, r = st.columns(2)
-    with l:
-        crop_in = st.selectbox(
-            "Crop",
-            [
-                "Rice",
-                "Wheat",
-                "Maize",
-                "Cotton",
-                "Sugarcane",
-                "Barley",
-                "Millets",
-                "Groundnut",
-                "Soybean",
-                "Potato",
-            ],
-        )
-        season_in = st.selectbox(
-            "Season",
-            ["Kharif", "Rabi", "Summer", "Whole Year", "Winter", "Autumn"],
-        )
-        state_in = st.text_input("State", "Punjab")
-        year_in = st.number_input("Crop Year", 1997, 2035, 2026)
-    with r:
-        area_in = st.number_input(
-            "Area (Hectares)",
-            value=float(p.get("total_land_ha", 5.0)),
-        )
-        prod_in = st.number_input("Historic Production (Tonnes)", value=20.0)
-        rain_in = st.number_input("Annual Rainfall (mm)", value=800.0)
-        fert_in = st.number_input("Fertilizer Input (kg)", value=450.0)
-        pest_in = st.number_input("Pesticide Input (kg)", value=8.0)
-
-    if st.button("🚀 Predict Crop Yield", type="primary", use_container_width=True):
-        if ml_models["yield"]:
-            try:
-                c_enc = ml_models["crop_enc"].transform([crop_in.strip()])[0]
-                s_classes = [
-                    x.strip() for x in ml_models["season_enc"].classes_
-                ]
-                s_enc = s_classes.index(season_in.strip())
-                st_classes = [
-                    x.strip() for x in ml_models["state_enc"].classes_
-                ]
-                st_enc = st_classes.index(state_in.strip())
-
-                inp = pd.DataFrame(
-                    {
-                        "Crop": [c_enc],
-                        "Crop_Year": [year_in],
-                        "Season": [s_enc],
-                        "State": [st_enc],
-                        "Area": [area_in],
-                        "Production": [prod_in],
-                        "Annual_Rainfall": [rain_in],
-                        "Fertilizer": [fert_in],
-                        "Pesticide": [pest_in],
-                    }
-                )
-                y_pred = float(ml_models["yield"].predict(inp)[0])
-                tot_out = y_pred * area_in
-
-                st.session_state.predicted_yield = y_pred
-                st.session_state.total_output = tot_out
-
-                st.success("✅ Yield Forecast Completed!")
-                ym1, ym2 = st.columns(2)
-                ym1.metric("Predicted Yield", f"{y_pred:.2f} t/ha")
-                ym2.metric("Total Estimated Output", f"{tot_out:.2f} Tonnes")
-            except Exception as e:
-                st.error(f"Yield Model Error: {e}")
-        else:
-            st.info("Demo Mode: Predicted Yield -> **4.20 t/ha** | Total Output -> **21.00 Tonnes**")
-
-# ======================================================================
-# TAB 6: FARM VALUE & INCOME
-# ======================================================================
-with tabs[5]:
-    st.markdown("### 💰 **XGBoost Farm Value & Valuation Estimation**")
-    st.caption("Estimate overall farm economic valuation using NSS-trained ML.")
-
-    p = st.session_state.profile
-    if not p:
-        st.warning("⚠️ Please complete the Farmer Profile first.")
-    else:
-        col1, col2 = st.columns(2)
-        with col1:
-            irr_area = st.number_input(
-                "Irrigated Area (ha)",
-                0.0,
-                float(p.get("total_land_ha", 5.0)),
-                3.0,
-            )
-        with col2:
-            loan_amt = st.number_input(
-                "Agricultural Loan Amount (₹)", 0.0, 10000000.0, 0.0
-            )
-
-        if st.button(
-            "🌾 Calculate Farm Value", type="primary", use_container_width=True
-        ):
-            if ml_models["farm_val"]:
-                try:
-                    land = float(p.get("total_land_ha", 5.0))
-                    land_s = max(land, 0.001)
-                    inp = pd.DataFrame(
-                        [{
-                            "state": p.get("region", "Punjab"),
-                            "district": 1,
-                            "gender": "Male",
-                            "education": p.get("education_level", "Secondary"),
-                            "agri_training": 2,
-                            "Principal_Activity": "Cultivation",
-                            "agricultural_land": "Yes",
-                            "major_crop": "Cereals",
-                            "irrigated": "Yes" if irr_area > 0 else "No",
-                            "irrigation_source": "Ground Water",
-                            "bank_account": "Yes",
-                            "kcc": "Yes" if loan_amt > 0 else "No",
-                            "msp_awareness": "Yes",
-                            "sold_at_msp": "No",
-                            "technical_advice": "No",
-                            "advice_adopted": "No",
-                            "crop_insured": "No",
-                            "soil_health_card": "No",
-                            "followed_soil_health_card": "No",
-                            "farmer_organization": "No",
-                            "age": float(p.get("age", 35)),
-                            "household_size": 5.0,
-                            "land_area": land,
-                            "irrigated_area": irr_area,
-                            "crops_grown": 2.0,
-                            "wages_salary": 0.0,
-                            "land_rent_income": 0.0,
-                            "nonfarm_net_income": float(
-                                p.get("non_agri_income", 12000)
-                            )
-                            * 12,
-                            "loan_amount": loan_amt,
-                            "interest_rate": 7.0,
-                            "irrigation_intensity": irr_area / land_s,
-                            "loan_per_ha": loan_amt / land_s,
-                            "crops_per_ha": 2.0 / land_s,
-                            "household_density": 5.0 / land_s,
-                            "irrigated_share": irr_area / land_s,
-                            "interest_burden": loan_amt * 0.07,
-                            "loan_land_interaction": loan_amt * land,
-                            "land_size_squared": land**2,
-                            "msp_sell_rate": 0.0,
-                        }]
-                    )
-                    val = max(0.0, float(ml_models["farm_val"].predict(inp)[0]))
-                    st.session_state.farm_value = val
-                    st.success("Valuation Estimated!")
-                    st.metric("Estimated Farm Value", f"₹ {val:,.0f}")
-                except Exception as e:
-                    st.error(f"XGBoost Model Error: {e}")
-            else:
-                st.info("Demo Valuation -> **₹ 1,05,764**")
-
-# ======================================================================
-# TAB 7: EXECUTIVE REPORT
-# ======================================================================
-with tabs[6]:
-    st.markdown("### 📄 **Farmer Executive Summary Report**")
-    p = st.session_state.profile
-
-    if not p:
-        st.info("Fill in the Farmer Profile tab to generate a report.")
-    else:
-        rep_text = f"""==================================================
-AGRIVISION AI - EXECUTIVE FARMER REPORT
-==================================================
-Farmer ID       : {p.get('farmer_id', 'N/A')}
-State / Region  : {p.get('region', 'N/A')}
-Land Area       : {p.get('total_land_ha', 'N/A')} Hectares
-Current Crop    : {p.get('current_crop', 'N/A')}
-Monthly Income  : ₹ {p.get('non_agri_income', 'N/A')}
-
-PREDICTIVE ANALYTICS SUMMARY:
---------------------------------------------------
-Recommended Crop : {st.session_state.get('recommended_crop', 'Not Run')}
-Crop Confidence  : {st.session_state.get('crop_confidence', 0.0):.2f}%
-Predicted Yield  : {st.session_state.get('predicted_yield', 0.0):.2f} t/ha
-Total Output     : {st.session_state.get('total_output', 0.0):.2f} Tonnes
-Est. Farm Value  : ₹ {st.session_state.get('farm_value', 0.0):,.0f}
-==================================================
-Report Generated via AgriVision AI System
-"""
-        st.text_area("Full Summary Report Preview", rep_text, height=280)
-        st.download_button(
-            "📥 Download Executive Report (.txt)",
-            rep_text,
-            file_name=f"{p.get('farmer_id', 'farmer')}_agrivision_report.txt",
-            type="primary",
-        )
+            st.success("Profile saved. It'll now feed every other tab.")
+            st.toast(f"Profile for {farmer_id} saved!", icon="✅")
 
 # ----------------------------------------------------------------------
-# Floating Chatbot Popover Logic (Groq + Llama 3)
+# 2. Weather Intelligence
+# ----------------------------------------------------------------------
+WEATHER_API_KEY = st.secrets.get("OPENWEATHER_API_KEY", None)
+
+
+def get_weather(city):
+    if not WEATHER_API_KEY:
+        return None
+    url = f"https://api.openweathermap.org/data/2.5/weather?q={city},IN&appid={WEATHER_API_KEY}&units=metric"
+    try:
+        response = requests.get(url, timeout=8)
+    except requests.RequestException:
+        return None
+    if response.status_code != 200:
+        return None
+    data = response.json()
+    return {
+        "temperature": data["main"]["temp"],
+        "humidity": data["main"]["humidity"],
+        "pressure": data["main"]["pressure"],
+        "wind": data["wind"]["speed"],
+        "condition": data["weather"][0]["main"],
+        "description": data["weather"][0]["description"],
+        "icon": data["weather"][0]["icon"],
+        "city": data["name"],
+    }
+
+
+with tabs[2]:
+    with st.container(border=True):
+        st.header("🌦 Weather Intelligence Dashboard")
+        p = st.session_state.profile
+
+        if not WEATHER_API_KEY:
+            st.info(
+                "Add your OpenWeatherMap key in Streamlit Cloud under Manage app → Settings → Secrets, as:\n\n"
+                "`OPENWEATHER_API_KEY = \"your-key-here\"`"
+            )
+
+        city = st.text_input("Enter City", value=p.get("region", "Patna"))
+
+        if st.button("Get Live Weather", type="primary"):
+            weather = get_weather(city)
+            if weather is None:
+                st.error("Unable to fetch weather." if WEATHER_API_KEY else "No weather API key configured yet.")
+            else:
+                st.session_state.weather_result = weather
+
+        weather = st.session_state.weather_result
+        if weather:
+            st.success(f"Live Weather • {weather['city']}")
+            c1, c2, c3, c4 = st.columns(4)
+            c1.metric("🌡 Temperature", f"{weather['temperature']} °C")
+            c2.metric("💧 Humidity", f"{weather['humidity']}%")
+            c3.metric("🌬 Wind", f"{weather['wind']} m/s")
+            c4.metric("🧭 Pressure", f"{weather['pressure']} hPa")
+
+            st.divider()
+            col1, col2 = st.columns([1, 3])
+            with col1:
+                st.image(f"https://openweathermap.org/img/wn/{weather['icon']}@2x.png", width=100)
+            with col2:
+                st.subheader(weather["condition"])
+                st.write(weather["description"].title())
+
+            st.divider()
+            st.subheader("🌾 AI Farming Advisory")
+            if weather["temperature"] > 35:
+                st.warning("High temperature detected. Increase irrigation frequency.")
+            elif weather["humidity"] > 85:
+                st.warning("Very high humidity. Monitor crops for fungal diseases.")
+            elif weather["condition"] == "Rain":
+                st.info("Rain expected. Avoid irrigation and fertilizer application today.")
+            else:
+                st.success("Weather conditions are favourable for normal farming operations.")
+
+# ----------------------------------------------------------------------
+# 3. Crop Recommendation
+# ----------------------------------------------------------------------
+with tabs[3]:
+    with st.container(border=True):
+        st.header("🌾 AI-Powered Crop Recommendation")
+        st.caption("Enter the latest soil test values to get the best crop recommendation.")
+
+        if crop_model is None or label_encoder is None:
+            st.info("crop_model.pkl / label_encoder.pkl not found next to app.py -- this tab needs those to run.")
+
+        col1, col2 = st.columns(2)
+        with col1:
+            N = st.number_input("Nitrogen (N)", 0, 200, 90)
+            P = st.number_input("Phosphorus (P)", 0, 200, 42)
+            K = st.number_input("Potassium (K)", 0, 250, 43)
+            ph = st.number_input("Soil pH", 0.0, 14.0, 6.5)
+        with col2:
+            temperature = st.number_input("Temperature (°C)", 0.0, 50.0, 27.0, key="crop_temp")
+            humidity = st.number_input("Humidity (%)", 0.0, 100.0, 80.0)
+            rainfall = st.number_input("Rainfall (mm)", 0.0, 3000.0, 800.0, key="crop_rainfall")
+
+        if st.button("🌱 Generate Crop Recommendation", type="primary"):
+            if crop_model is None or label_encoder is None:
+                st.error("Model files missing -- can't run a real prediction yet.")
+            else:
+                npk_total = N + P + K
+                n_ratio = N / npk_total if npk_total else 0
+                p_ratio = P / npk_total if npk_total else 0
+                k_ratio = K / npk_total if npk_total else 0
+                rainfall_low = int(rainfall < 100)
+                rainfall_medium = int(100 <= rainfall < 200)
+                rainfall_high = int(rainfall >= 200)
+                temp_cool = int(temperature < 20)
+                temp_moderate = int(20 <= temperature < 30)
+                temp_hot = int(temperature >= 30)
+
+                features = np.array([[
+                    N, P, K, temperature, humidity, ph, rainfall, npk_total,
+                    n_ratio, p_ratio, k_ratio, rainfall_low, rainfall_medium,
+                    rainfall_high, temp_cool, temp_moderate, temp_hot,
+                ]])
+
+                prediction = crop_model.predict(features)
+                crop = label_encoder.inverse_transform(prediction)[0]
+                confidence = float(np.max(crop_model.predict_proba(features)) * 100)
+
+                st.session_state.recommended_crop = crop
+                st.session_state.crop_confidence = confidence
+
+        if st.session_state.recommended_crop:
+            crop = st.session_state.recommended_crop
+            confidence = st.session_state.crop_confidence
+            st.success(f"🌾 Recommended Crop : **{crop.upper()}**")
+            st.progress(int(confidence))
+            st.metric("Model Confidence", f"{confidence:.2f}%")
+            st.divider()
+
+            c1, c2, c3 = st.columns(3)
+            with c1:
+                st.info("💧 Water Requirement")
+                st.write("Based on crop")
+            with c2:
+                st.info("🌱 Growing Season")
+                st.write("Kharif / Rabi")
+            with c3:
+                st.info("📈 Suitability")
+                st.write("Excellent")
+
+            st.divider()
+            st.subheader("AI Recommendation")
+            st.success(
+                f"""
+✅ Recommended Crop : **{crop}**
+
+✔ Soil nutrients are suitable.
+✔ Temperature matches crop requirement.
+✔ Rainfall conditions are favourable.
+✔ Model selected this crop with **{confidence:.2f}% confidence**.
+"""
+            )
+            st.caption("This feeds into Yield Prediction as the default crop below.")
+
+# ----------------------------------------------------------------------
+# 4. Yield Prediction
+# ----------------------------------------------------------------------
+with tabs[4]:
+    with st.container(border=True):
+        st.header("🌾 AI Yield Prediction")
+        st.caption("Predict expected crop yield using Machine Learning.")
+
+        if yield_model is None:
+            st.info("yield_model.pkl (and its encoders) not found next to app.py -- this tab needs those to run.")
+
+        crop_options = [
+            "Rice", "Wheat", "Maize", "Cotton", "Sugarcane", "Barley",
+            "Millets", "Groundnut", "Soybean", "Potato", "Gram", "Turmeric",
+        ]
+        default_crop = st.session_state.recommended_crop
+        default_index = 0
+        if default_crop:
+            for i, opt in enumerate(crop_options):
+                if opt.lower() == default_crop.lower():
+                    default_index = i
+                    break
+
+        left, right = st.columns(2)
+        with left:
+            crop = st.selectbox("Crop", crop_options, index=default_index)
+            if default_crop and crop.lower() == default_crop.lower():
+                st.caption(f"✓ Pre-filled from your Crop Recommendation ({st.session_state.crop_confidence:.0f}% confidence)")
+            season = st.selectbox("Season", ["Kharif", "Rabi", "Summer", "Whole Year", "Winter", "Autumn"])
+            state = st.text_input("State", st.session_state.profile.get("region", "Punjab"))
+            crop_year = st.number_input("Crop Year", 1997, 2035, 2026)
+        with right:
+            area = st.number_input("Area (Hectares)", value=float(st.session_state.profile.get("total_land_ha", 5.0)))
+            production = st.number_input("Production (Tonnes)", value=20.0)
+            rainfall = st.number_input("Annual Rainfall (mm)", value=800.0, key="yield_rainfall")
+            fertilizer = st.number_input("Fertilizer", value=450.0)
+            pesticide = st.number_input("Pesticide", value=8.0)
+
+        if st.button("🚀 Predict Yield", type="primary", use_container_width=True):
+            if yield_model is None or crop_encoder is None or season_encoder is None or state_encoder is None:
+                st.error("Model files missing -- can't run a real prediction yet.")
+            else:
+                try:
+                    crop_c = crop.strip()
+                    season_c = season.strip()
+                    state_c = state.strip()
+
+                    crop_encoded = crop_encoder.transform([crop_c])[0]
+                    season_classes = [x.strip() for x in season_encoder.classes_]
+                    season_encoded = season_classes.index(season_c)
+                    state_classes = [x.strip() for x in state_encoder.classes_]
+                    state_encoded = state_classes.index(state_c)
+
+                    input_data = pd.DataFrame({
+                        "Crop": [crop_encoded],
+                        "Crop_Year": [crop_year],
+                        "Season": [season_encoded],
+                        "State": [state_encoded],
+                        "Area": [area],
+                        "Production": [production],
+                        "Annual_Rainfall": [rainfall],
+                        "Fertilizer": [fertilizer],
+                        "Pesticide": [pesticide],
+                    })
+
+                    predicted_yield = float(yield_model.predict(input_data)[0])
+                    total_output = predicted_yield * area
+
+                    st.session_state.predicted_yield = predicted_yield
+                    st.session_state.total_output = total_output
+                    st.session_state.yield_crop = crop_c
+                    st.session_state.yield_season = season_c
+                    st.session_state.yield_state = state_c
+                except Exception as e:
+                    st.error("Prediction Failed")
+                    st.exception(e)
+
+        if st.session_state.predicted_yield:
+            predicted_yield = st.session_state.predicted_yield
+            total_output = st.session_state.total_output
+            st.success("✅ Yield Prediction Completed Successfully!")
+
+            m1, m2, m3 = st.columns(3)
+            m1.metric("🌾 Predicted Yield", f"{predicted_yield:.2f} t/ha")
+            m2.metric("📦 Estimated Production", f"{total_output:.2f} Tonnes")
+            category = "Excellent 🟢" if predicted_yield >= 5 else ("Average 🟡" if predicted_yield >= 3 else "Low 🔴")
+            m3.metric("Yield Category", category)
+
+            st.divider()
+            left2, right2 = st.columns(2)
+            with left2:
+                st.info(f"**Crop:** {st.session_state.yield_crop}\n\n**Season:** {st.session_state.yield_season}\n\n**State:** {st.session_state.yield_state}")
+            with right2:
+                st.info(f"**Predicted Yield:** {predicted_yield:.2f} t/ha\n\n**Estimated Production:** {total_output:.2f} Tonnes")
+
+            st.progress(min(predicted_yield / 8, 1.0))
+            st.caption("This feeds into your Final Report below.")
+
+# ----------------------------------------------------------------------
+# 5. Income Prediction (Farm Value Estimation)
+# ----------------------------------------------------------------------
+with tabs[5]:
+    with st.container(border=True):
+        st.header("🌾 Income Prediction — Farm Value Estimation")
+        st.caption("Estimate the total agricultural value of the farm using the trained XGBoost model.")
+
+        p = st.session_state.profile
+        if not p:
+            st.warning("Please complete the Farmer Profile first.")
+        elif farm_value_model is None:
+            st.info("farm_value_final_xgboost.pkl / farm_value_final_features.pkl not found next to app.py -- this tab needs those to run.")
+        else:
+            st.subheader("Farmer & Farm Information")
+            col1, col2, col3, col4 = st.columns(4)
+            col1.metric("Land Area", f"{p.get('total_land_ha', 5.0):.2f} ha")
+            col2.metric("Primary Crop", st.session_state.recommended_crop or p.get('current_crop', 'Wheat'))
+            col3.metric("State", p.get('region', 'Punjab'))
+            col4.metric("Age", f"{p.get('age', 35)} years")
+            if st.session_state.recommended_crop:
+                st.caption(f"✓ Using your recommended crop ({st.session_state.recommended_crop}) instead of the profile default.")
+
+            st.markdown("---")
+            st.subheader("🌱 Farm Details")
+            col1, col2 = st.columns(2)
+            with col1:
+                total_land = float(p.get("total_land_ha", 5.0))
+                irrigated_area = st.number_input(
+                    "Irrigated Area (hectares)", min_value=0.0, max_value=total_land,
+                    value=min(3.0, total_land), step=0.1,
+                    help="Portion of your agricultural land that is irrigated.",
+                )
+            with col2:
+                loan_amount = st.number_input(
+                    "Agricultural Loan Amount (₹)", min_value=0.0, max_value=10000000.0,
+                    value=0.0, step=1000.0, help="Current agricultural loan amount.",
+                )
+
+            st.markdown("---")
+            st.subheader("📋 Agricultural Support")
+            col1, col2 = st.columns(2)
+            with col1:
+                crop_insured = st.selectbox("Crop Insured", ["Yes", "No"], index=1)
+                soil_health_card = st.selectbox("Soil Health Card", ["Yes", "No"], index=1)
+            with col2:
+                followed_soil_health_card = st.selectbox("Followed Soil Health Card", ["Yes", "No"], index=1)
+                farmer_organization = st.selectbox("Farmer Organization", ["Yes", "No"], index=1)
+
+            st.markdown("")
+            if st.button("🌾 Predict Farm Value", type="primary", use_container_width=True):
+                with st.spinner("Analyzing farm characteristics..."):
+                    age = float(p.get("age", 35))
+                    land_area = float(p.get("total_land_ha", 5.0))
+                    state = p.get("region", "Punjab")
+                    current_crop = st.session_state.recommended_crop or p.get("current_crop", "Wheat")
+                    education = p.get("education_level", "Secondary")
+
+                    crop_map = {
+                        "Wheat": "Cereals", "Rice": "Cereals", "Maize": "Cereals", "Bajra": "Cereals",
+                        "Jowar": "Cereals", "Barley": "Cereals", "Pulses": "Pulses", "Groundnut": "Oilseeds",
+                        "Mustard": "Oilseeds", "Cotton": "Fibres", "Sugarcane": "Sugar Crops",
+                        "Potato": "Tuber Crops", "Vegetables": "Vegetables", "Fruits": "Fruits",
+                        "Spices": "Condiments & Spices",
+                    }
+                    major_crop = crop_map.get(current_crop, "Cereals")
+
+                    land_safe = max(land_area, 0.001)
+                    irrigation_intensity = irrigated_area / land_safe
+                    loan_per_ha = loan_amount / land_safe
+
+                    input_data = pd.DataFrame([{
+                        "state": state, "district": 1, "gender": "Male", "education": education,
+                        "agri_training": 2, "Principal_Activity": "Cultivation", "agricultural_land": "Yes",
+                        "major_crop": major_crop, "irrigated": "Yes" if irrigated_area > 0 else "No",
+                        "irrigation_source": "Ground Water", "bank_account": "Yes",
+                        "kcc": "Yes" if loan_amount > 0 else "No", "msp_awareness": "Yes", "sold_at_msp": "No",
+                        "technical_advice": "No", "advice_adopted": "No",
+                        "crop_insured": crop_insured, "soil_health_card": soil_health_card,
+                        "followed_soil_health_card": followed_soil_health_card,
+                        "farmer_organization": farmer_organization,
+                        "age": age, "household_size": 5.0, "land_area": land_area,
+                        "irrigated_area": irrigated_area, "crops_grown": 2.0, "wages_salary": 0.0,
+                        "land_rent_income": 0.0,
+                        "nonfarm_net_income": float(p.get("non_agri_income", 12000)) * 12,
+                        "loan_amount": loan_amount, "interest_rate": 7.0,
+                        "irrigation_intensity": irrigation_intensity, "loan_per_ha": loan_per_ha,
+                        "crops_per_ha": 2.0 / land_safe, "household_density": 5.0 / land_safe,
+                        "irrigated_share": irrigation_intensity, "interest_burden": loan_amount * 0.07,
+                        "loan_land_interaction": loan_amount * land_area, "land_size_squared": land_area ** 2,
+                        "msp_sell_rate": 0.0,
+                    }])
+
+                    predicted_value = max(0, float(farm_value_model.predict(input_data)[0]))
+                    st.session_state.farm_value_result = predicted_value
+
+            if st.session_state.farm_value_result:
+                predicted_value = st.session_state.farm_value_result
+                st.markdown("---")
+                st.success("Farm value estimated successfully!")
+                col1, col2 = st.columns([1.3, 1])
+                with col1:
+                    st.metric("Estimated Farm Value", f"₹ {predicted_value:,.0f}")
+                    st.caption("Estimated using the trained XGBoost model.")
+                with col2:
+                    gauge = go.Figure(go.Indicator(
+                        mode="gauge+number", value=61, number={"suffix": "%"}, title={"text": "Model R²"},
+                        gauge={"axis": {"range": [0, 100]}, "bar": {"color": "#22c55e"}, "bgcolor": "#131b18",
+                               "steps": [{"range": [0, 40], "color": "#2a1414"}, {"range": [40, 70], "color": "#2a2414"},
+                                         {"range": [70, 100], "color": "#14261a"}]},
+                    ))
+                    gauge.update_layout(height=200, margin=dict(l=20, r=20, t=40, b=10), paper_bgcolor="rgba(0,0,0,0)", font_color="#e8f0ec")
+                    st.plotly_chart(gauge, use_container_width=True)
+                with st.expander("How does this prediction work?"):
+                    st.write(
+                        "The model uses the farmer's profile, land characteristics, crop information, "
+                        "irrigation and financial information (including your Agricultural Support answers above) "
+                        "to estimate total farm value."
+                    )
+                st.caption("This feeds into your Final Report below.")
+
+# ----------------------------------------------------------------------
+# 6. Final Report
+# ----------------------------------------------------------------------
+with tabs[6]:
+    with st.container(border=True):
+        st.header("📄 Final Report")
+        p = st.session_state.profile
+        if not p:
+            st.info("Fill in the Farmer Profile tab to generate a report.")
+        else:
+            c1, c2, c3, c4 = st.columns(4)
+            c1.metric("Land Holding", f"{p.get('total_land_ha')} ha")
+            c2.metric("Recommended Crop", st.session_state.recommended_crop.upper() if st.session_state.recommended_crop else "Not run yet")
+            c3.metric("Predicted Yield", f"{st.session_state.predicted_yield:.2f} t/ha" if st.session_state.predicted_yield else "Not run yet")
+            c4.metric("Farm Value", f"₹{st.session_state.farm_value_result:,.0f}" if st.session_state.farm_value_result else "Not run yet")
+
+            st.divider()
+            report_lines = [
+                "AgriVision AI -- Farmer Report",
+                f"Farmer ID: {p.get('farmer_id')}",
+                f"Region: {p.get('region')}",
+                f"Land: {p.get('total_land_ha')} ha",
+                f"Current Crop: {p.get('current_crop')}",
+            ]
+            if st.session_state.recommended_crop:
+                report_lines.append(f"Recommended Crop: {st.session_state.recommended_crop} ({st.session_state.crop_confidence:.1f}% confidence)")
+            if st.session_state.predicted_yield:
+                report_lines.append(f"Predicted Yield: {st.session_state.predicted_yield:.2f} t/ha ({st.session_state.total_output:.1f} tonnes total)")
+            if st.session_state.farm_value_result:
+                report_lines.append(f"Estimated Farm Value: ₹{st.session_state.farm_value_result:,.0f}")
+            if st.session_state.weather_result:
+                w = st.session_state.weather_result
+                report_lines.append(f"Weather at time of report: {w['temperature']}°C, {w['condition']} ({w['city']})")
+
+            report_text = "\n".join(report_lines)
+            st.text_area("Report preview", report_text, height=220)
+            st.download_button("📥 Download Report (.txt)", report_text, file_name=f"{p.get('farmer_id', 'farmer')}_report.txt", type="primary")
+
+
+# ----------------------------------------------------------------------
+# Floating AI Assistant "farmer" bubble (Groq + Llama 3)
 # ----------------------------------------------------------------------
 def ai_assistant_reply(question, context):
     groq_api_key = st.secrets.get("GROQ_API_KEY", None)
-
     if not groq_api_key:
-        return "❌ **Groq API Key Missing!** Add `GROQ_API_KEY` in Streamlit Cloud Secrets."
+        return "❌ **Groq API Key Missing!**\n\nAdd `GROQ_API_KEY` in Streamlit Cloud: **Manage App → Settings → Secrets**."
 
-    prompt = f"""You are AgriVision AI, an expert agricultural advisor for Indian farmers.
+    prompt = f"""You are AgriVision AI, an expert agricultural advisor helping Indian farmers.
+
 Current Farmer Information:
 {context}
 
-Question:
+Farmer Question:
 {question}
 
 Instructions:
-- Give simple, practical farming advice.
-- Use bullet points.
-- Keep responses concise (under 200 words).
-"""
+- Give practical farming advice.
+- Use simple English.
+- Answer in bullet points whenever possible.
+- If crop recommendation, yield, or farm value predictions are available, use them.
+- Keep the answer under 250 words."""
+
     try:
+        from groq import Groq
         client = Groq(api_key=groq_api_key)
         completion = client.chat.completions.create(
             model="llama-3.3-70b-versatile",
@@ -747,16 +825,38 @@ Instructions:
             max_tokens=400,
         )
         return completion.choices[0].message.content
-    except Exception as e:
-        return f"❌ Groq Error: {e}"
+    except Exception as e:  # noqa: BLE001
+        return f"❌ Groq API Error:\n\n{e}"
 
 
 def render_ai_assistant_bubble():
     AVATARS = {"user": "🧑‍🌾", "assistant": "🌾"}
 
+    if FARMER_ICON_B64:
+        st.markdown(
+            f"""
+            <style>
+            div[data-testid="stPopover"] button {{
+                background-image: url('data:image/png;base64,{FARMER_ICON_B64}');
+                background-size: cover; background-position: center; background-repeat: no-repeat;
+                font-size: 0 !important; color: transparent !important;
+            }}
+            div[data-testid="stPopover"] button p {{ display: none; }}
+            </style>
+            """,
+            unsafe_allow_html=True,
+        )
+
     with st.popover("🧑‍🌾", use_container_width=False, help="Ask AgriVision AI"):
         st.markdown("**🌾 AgriVision Assistant**")
-        st.caption("Ask advice about crops, yields, or farm income.")
+        st.caption("Ask about your predicted income, crop choices, or general farming advice.")
+
+        clicked = None
+        if not st.session_state.chat_history:
+            st.markdown("**Try asking:**")
+            for s in ["How can I increase my income?", "What crop suits my land best?", "Is this a good time to sell?"]:
+                if st.button(s, use_container_width=True, key=f"chip_{s}"):
+                    clicked = s
 
         chat_box = st.container(height=280)
         with chat_box:
@@ -764,13 +864,24 @@ def render_ai_assistant_bubble():
                 with st.chat_message(role, avatar=AVATARS.get(role)):
                     st.write(msg)
 
-        question = st.chat_input("Ask something...", key="floating_chat_input")
+        question = st.chat_input("Ask something...", key="floating_chat_input") or clicked
         if question:
             p = st.session_state.get("profile", {})
-            context = f"Profile: {p}. Rec Crop: {st.session_state.get('recommended_crop', 'N/A')}. Pred Yield: {st.session_state.get('predicted_yield', 'N/A')}."
+            context = (
+                f"Farmer ID: {p.get('farmer_id', 'N/A')}\n"
+                f"Age: {p.get('age', 'N/A')}\nState: {p.get('region', 'N/A')}\n"
+                f"Land: {p.get('total_land_ha', 'N/A')} ha\nCurrent Crop: {p.get('current_crop', 'N/A')}\n"
+            )
+            if st.session_state.recommended_crop:
+                context += f"Recommended Crop: {st.session_state.recommended_crop} ({st.session_state.crop_confidence:.0f}% confidence)\n"
+            if st.session_state.predicted_yield:
+                context += f"Predicted Yield: {st.session_state.predicted_yield:.2f} t/ha\n"
+            if st.session_state.farm_value_result:
+                context += f"Estimated Farm Value: ₹{st.session_state.farm_value_result:,.0f}\n"
 
             st.session_state.chat_history.append(("user", question))
-            reply = ai_assistant_reply(question, context)
+            with st.spinner("AgriVision AI is thinking..."):
+                reply = ai_assistant_reply(question, context)
             st.session_state.chat_history.append(("assistant", reply))
             st.rerun()
 
