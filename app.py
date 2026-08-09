@@ -884,6 +884,7 @@ with tabs[1]:
                 crops_per_ha = (
                     crops_grown / land_safe
                 )
+                land_safe = max(land_area,0.001)
 
                 household_density = (
                     household_size / land_safe
