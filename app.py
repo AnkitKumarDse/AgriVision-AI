@@ -400,17 +400,7 @@ with tabs[0]:
             for item in news:
                 st.markdown(f"- [{item['title']}]({item['url']}) — *{item['source']}*")
         else:
-            if not st.secrets.get("NEWSAPI_KEY", None):
-                st.caption("Sample headlines below — add `NEWSAPI_KEY` in Streamlit secrets for a live feed.")
-            sample_news = [
-                "Government raises MSP for key Rabi crops ahead of sowing season",
-                "Monsoon forecast points to normal rainfall across major farming states",
-                "New irrigation scheme targets small and marginal farmers",
-                "Digital agriculture push: states expand soil health card coverage",
-                "Export demand for Indian spices rises amid supply chain shifts",
-            ]
-            for headline in sample_news:
-                st.markdown(f"- {headline} *(sample)*")
+            st.info("Unable to load live news feed right now.")
 
     st.write("")
     with st.container(border=True):
