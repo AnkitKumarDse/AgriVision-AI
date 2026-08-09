@@ -324,23 +324,44 @@ tabs = st.tabs(
 # something useful" landing screen. Personal predictions live in their
 # own tabs and roll up into Final Report.
 # ----------------------------------------------------------------------
+import urllib.request
+import xml.etree.ElementTree as ET
+
+
 @st.cache_data(ttl=1800)
 def fetch_agri_news():
-    """Fetches live Indian agricultural news via RSS (No API Key Required)."""
+    """Fetches live Indian agricultural news via Google News RSS using built-in Python libraries."""
     rss_url = "https://news.google.com/rss/search?q=India+agriculture&hl=en-IN&gl=IN&ceid=IN:en"
     try:
-        feed = feedparser.parse(rss_url)
+        req = urllib.request.Request(
+            rss_url, headers={"User-Agent": "Mozilla/5.0"}
+        )
+        with urllib.request.urlopen(req, timeout=8) as response:
+            xml_data = response.read()
+
+        root = ET.fromstring(xml_data)
         articles = []
-        for entry in feed.entries[:5]:
-            articles.append(
-                {
-                    "title": entry.title,
-                    "source": getattr(entry, "source", {}).get(
-                        "title", "Google News"
-                    ),
-                    "url": entry.link,
-                }
+
+        for item in root.findall("./channel/item")[:5]:
+            title = (
+                item.find("title").text
+                if item.find("title") is not None
+                else "Agri News"
             )
+            link = (
+                item.find("link").text
+                if item.find("link") is not None
+                else "#"
+            )
+            source_elem = item.find("source")
+            source = (
+                source_elem.text
+                if source_elem is not None
+                else "Google News"
+            )
+
+            articles.append({"title": title, "source": source, "url": link})
+
         return articles if articles else None
     except Exception:
         return None
