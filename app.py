@@ -230,32 +230,39 @@ st.markdown(
     """,
     unsafe_allow_html=True,
 )
+import streamlit.components.v1 as components
+
 # ----------------------------------------------------------------------
-# Auto-Scroll Script (Keeps 100% of your visual layout intact)
+# Streamlit Tab Auto-Scroll Script (Works in Streamlit Cloud Iframe)
 # ----------------------------------------------------------------------
-st.markdown(
+components.html(
     """
     <script>
-    const autoScrollObserver = new MutationObserver(() => {
-        const tabButtons = parent.document.querySelectorAll('button[role="tab"]');
+    function enableTabAutoScroll() {
+        const doc = window.parent.document;
+        const tabButtons = doc.querySelectorAll('button[role="tab"]');
+        
         tabButtons.forEach(button => {
             if (!button.dataset.scrollBound) {
                 button.dataset.scrollBound = "true";
                 button.addEventListener("click", () => {
                     setTimeout(() => {
-                        const activeContent = parent.document.querySelector('div[role="tabpanel"]');
-                        if (activeContent) {
-                            activeContent.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                        const tabList = doc.querySelector('div[data-baseweb="tab-list"]');
+                        if (tabList) {
+                            tabList.scrollIntoView({ behavior: 'smooth', block: 'start' });
                         }
-                    }, 150);
+                    }, 120);
                 });
             }
         });
-    });
-    autoScrollObserver.observe(parent.document.body, { childList: true, subtree: true });
+    }
+
+    // Run on initial load and keep checking for DOM renders
+    setInterval(enableTabAutoScroll, 300);
     </script>
     """,
-    unsafe_allow_html=True,
+    height=0,
+    width=0,
 )
 
 def render_hero():
