@@ -230,7 +230,33 @@ st.markdown(
     """,
     unsafe_allow_html=True,
 )
-
+# ----------------------------------------------------------------------
+# Auto-Scroll Script (Keeps 100% of your visual layout intact)
+# ----------------------------------------------------------------------
+st.markdown(
+    """
+    <script>
+    const autoScrollObserver = new MutationObserver(() => {
+        const tabButtons = parent.document.querySelectorAll('button[role="tab"]');
+        tabButtons.forEach(button => {
+            if (!button.dataset.scrollBound) {
+                button.dataset.scrollBound = "true";
+                button.addEventListener("click", () => {
+                    setTimeout(() => {
+                        const activeContent = parent.document.querySelector('div[role="tabpanel"]');
+                        if (activeContent) {
+                            activeContent.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                        }
+                    }, 150);
+                });
+            }
+        });
+    });
+    autoScrollObserver.observe(parent.document.body, { childList: true, subtree: true });
+    </script>
+    """,
+    unsafe_allow_html=True,
+)
 
 def render_hero():
     checks = {
