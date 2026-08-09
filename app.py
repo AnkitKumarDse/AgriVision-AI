@@ -68,59 +68,91 @@ def _load_farmer_icon_b64():
 FARMER_ICON_B64 = _load_farmer_icon_b64()
 
 # ----------------------------------------------------------------------
-# Styling -- bold gradient hero, colorful KPI cards, glowing tabs.
+# Styling -- full-screen immersive hero, glass KPI cards, pipeline stepper.
 # ----------------------------------------------------------------------
 st.markdown(
     """
     <style>
-    .block-container { padding-top: 1.5rem; max-width: 1250px; }
+    .block-container { padding-top: 0; padding-bottom: 2rem; max-width: 1300px; }
+    header[data-testid="stHeader"] { background: transparent; }
 
+    /* ---------------- FULL-SCREEN HERO ---------------- */
     .av-hero {
-        background: radial-gradient(circle at 20% 20%, #1a3d26 0%, #0b1210 60%);
-        border: 1px solid #21362a;
-        border-radius: 20px;
-        padding: 2.6rem 2.6rem 2.2rem 2.6rem;
-        margin-bottom: 1.6rem;
-        position: relative;
-        overflow: hidden;
+        margin: -1rem -1rem 0 -1rem;
+        min-height: 90vh;
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
+        text-align: center;
+        position: relative; overflow: hidden;
+        background: #070b09;
+        padding: 3rem 1.5rem 7.5rem 1.5rem;
+    }
+    .av-hero::before, .av-hero::after {
+        content: ""; position: absolute; border-radius: 50%; filter: blur(70px);
+        animation: av-float 9s ease-in-out infinite;
     }
     .av-hero::before {
-        content: "";
-        position: absolute; top: -60%; right: -10%;
-        width: 420px; height: 420px; border-radius: 50%;
-        background: radial-gradient(circle, rgba(34,197,94,0.25) 0%, rgba(34,197,94,0) 70%);
+        width: 560px; height: 560px; background: radial-gradient(circle, rgba(34,197,94,0.38), transparent 70%);
+        top: -160px; left: -120px;
     }
-    .av-hero h1 {
-        font-size: 3rem;
-        font-weight: 800;
-        margin-bottom: 0.3rem;
-        letter-spacing: -0.02em;
-        background: linear-gradient(90deg, #4ade80, #22d3ee 60%, #facc15);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        background-clip: text;
+    .av-hero::after {
+        width: 480px; height: 480px; background: radial-gradient(circle, rgba(34,211,238,0.28), transparent 70%);
+        bottom: -80px; right: -100px; animation-delay: 3s;
     }
-    .av-hero p { color: #9db3a8; font-size: 1.05rem; margin: 0; max-width: 640px; }
+    @keyframes av-float {
+        0%, 100% { transform: translate(0, 0) scale(1); }
+        50% { transform: translate(30px, -20px) scale(1.08); }
+    }
+    .av-hero-inner { position: relative; z-index: 2; max-width: 820px; }
     .av-badge {
-        display: inline-block; background: #1c3327; color: #4ade80;
-        border-radius: 999px; padding: 4px 14px; font-size: 0.78rem;
-        font-weight: 700; letter-spacing: 0.05em; margin-bottom: 1rem;
-        border: 1px solid #2c4636;
+        display: inline-flex; align-items: center; gap: 6px;
+        background: rgba(34,197,94,0.1); color: #4ade80;
+        border-radius: 999px; padding: 6px 16px; font-size: 0.8rem;
+        font-weight: 700; letter-spacing: 0.08em; margin-bottom: 1.4rem;
+        border: 1px solid rgba(74,222,128,0.35);
     }
+    .av-badge .dot { width: 7px; height: 7px; border-radius: 50%; background: #4ade80; animation: av-pulse-dot 1.8s infinite; }
+    @keyframes av-pulse-dot { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+    .av-hero h1 {
+        font-size: clamp(3rem, 8vw, 6rem);
+        font-weight: 900; line-height: 0.98; margin-bottom: 1.1rem; letter-spacing: -0.04em;
+        background: linear-gradient(100deg, #ffffff 10%, #4ade80 45%, #22d3ee 70%, #facc15 100%);
+        -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+    }
+    .av-hero p.sub { color: #a9bdb2; font-size: clamp(1rem, 1.6vw, 1.25rem); margin: 0 auto 1.8rem auto; max-width: 640px; }
 
-    .stTabs [data-baseweb="tab-list"] { gap: 6px; border-bottom: 1px solid #21362a; }
+    .av-status-row { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+    .av-status-pill {
+        display: flex; align-items: center; gap: 6px; font-size: 0.78rem; font-weight: 600;
+        padding: 6px 14px; border-radius: 999px; background: rgba(255,255,255,0.04);
+        border: 1px solid rgba(255,255,255,0.08); color: #cdded4;
+    }
+    .av-status-pill .led { width: 8px; height: 8px; border-radius: 50%; }
+    .led-on { background: #4ade80; box-shadow: 0 0 8px #4ade80; }
+    .led-off { background: #64748b; }
+
+    /* ---------------- TABS: float as a glass bar over the hero ---------------- */
+    .stTabs { margin-top: -6.2rem; position: relative; z-index: 5; }
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 4px; border-bottom: none;
+        background: rgba(20, 30, 24, 0.75);
+        backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+        border: 1px solid rgba(74, 222, 128, 0.18);
+        border-radius: 18px; padding: 10px 12px;
+        box-shadow: 0 20px 50px rgba(0,0,0,0.55);
+        flex-wrap: wrap;
+    }
     .stTabs [data-baseweb="tab"] {
-        background-color: transparent; border-radius: 10px 10px 0 0;
-        padding: 12px 18px; color: #9db3a8; font-weight: 600; font-size: 0.95rem;
+        background-color: transparent; border-radius: 12px;
+        padding: 14px 20px; color: #8fa89b; font-weight: 800; font-size: 0.95rem;
+        letter-spacing: 0.01em;
     }
     .stTabs [aria-selected="true"] {
-        background: linear-gradient(180deg, #16261d 0%, #0f1a15 100%) !important;
-        color: #4ade80 !important; font-weight: 800;
-        box-shadow: inset 0 -3px 0 #4ade80;
+        background: linear-gradient(135deg, #1c3327, #14261d) !important;
+        color: #4ade80 !important; box-shadow: 0 0 0 1px rgba(74,222,128,0.4), 0 0 18px rgba(74,222,128,0.25);
     }
 
     div[data-testid="stVerticalBlockBorderWrapper"] {
-        background-color: #121916; border: 1px solid #21362a; border-radius: 16px;
+        background-color: #10160f; border: 1px solid #1c2b22; border-radius: 18px;
     }
     div[data-testid="stMetric"] {
         background-color: #131b18; border: 1px solid #21362a; border-radius: 12px; padding: 16px 18px;
@@ -133,17 +165,39 @@ st.markdown(
     }
     button[kind="primary"]:hover { filter: brightness(1.12); }
 
-    /* KPI cards on General Dashboard */
-    .kpi-card {
-        border-radius: 16px; padding: 20px 22px; border: 1px solid #24352b;
-        background: linear-gradient(135deg, var(--c1), var(--c2));
-        position: relative; overflow: hidden; min-height: 118px;
+    /* ---------------- PIPELINE STEPPER ---------------- */
+    .av-pipeline { display: flex; align-items: flex-start; justify-content: space-between; margin: 0.5rem 0 1.8rem 0; }
+    .av-step { display: flex; flex-direction: column; align-items: center; flex: 1; position: relative; }
+    .av-step .circle {
+        width: 46px; height: 46px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+        font-size: 1.2rem; font-weight: 800; border: 2px solid #2a3d31; background: #131c17; color: #5f7a6b;
+        transition: all 0.3s ease; z-index: 2;
     }
-    .kpi-card .kpi-label { font-size: 0.8rem; color: rgba(255,255,255,0.75); font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; }
-    .kpi-card .kpi-value { font-size: 1.7rem; font-weight: 800; color: white; margin-top: 6px; }
+    .av-step.done .circle { background: linear-gradient(135deg, #22c55e, #16a34a); border-color: #4ade80; color: white; box-shadow: 0 0 16px rgba(34,197,94,0.5); }
+    .av-step.active .circle { border-color: #facc15; color: #facc15; animation: av-pulse-ring 1.6s infinite; }
+    @keyframes av-pulse-ring { 0% { box-shadow: 0 0 0 0 rgba(250,204,21,0.5); } 70% { box-shadow: 0 0 0 10px rgba(250,204,21,0); } 100% { box-shadow: 0 0 0 0 rgba(250,204,21,0); } }
+    .av-step .label { margin-top: 8px; font-size: 0.74rem; font-weight: 700; color: #9db3a8; text-align: center; max-width: 90px; }
+    .av-step.done .label { color: #4ade80; }
+    .av-step::after {
+        content: ""; position: absolute; top: 23px; left: calc(50% + 23px); width: calc(100% - 46px); height: 2px;
+        background: #2a3d31; z-index: 1;
+    }
+    .av-step:last-child::after { display: none; }
+    .av-step.done::after { background: linear-gradient(90deg, #4ade80, #2a3d31); }
+
+    /* ---------------- GLASS KPI CARDS ---------------- */
+    .kpi-card {
+        border-radius: 18px; padding: 22px 24px; border: 1px solid rgba(255,255,255,0.08);
+        background: linear-gradient(135deg, var(--c1), var(--c2));
+        position: relative; overflow: hidden; min-height: 128px;
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+    .kpi-card:hover { transform: translateY(-3px); box-shadow: 0 10px 26px rgba(0,0,0,0.35); }
+    .kpi-card .kpi-label { font-size: 0.78rem; color: rgba(255,255,255,0.75); font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; }
+    .kpi-card .kpi-value { font-size: 1.85rem; font-weight: 800; color: white; margin-top: 8px; }
     .kpi-card .kpi-sub { font-size: 0.78rem; color: rgba(255,255,255,0.65); margin-top: 4px; }
 
-    /* Floating AI-assistant bubble */
+    /* ---------------- Floating AI-assistant bubble ---------------- */
     div[data-testid="stPopover"] {
         position: fixed !important; top: 58%; left: 26px; margin-top: -34px;
         z-index: 9999; width: auto !important; animation: av-bob 3.2s ease-in-out infinite;
@@ -173,15 +227,39 @@ st.markdown(
     }
     @keyframes av-panel-in { 0% { opacity: 0; transform: translateY(6px) scale(0.97); } 100% { opacity: 1; transform: translateY(0) scale(1); } }
     </style>
-
-    <div class="av-hero">
-        <div class="av-badge">POWERED BY AI &amp; DATA ANALYTICS</div>
-        <h1>🌾 AgriVision AI</h1>
-        <p>Real-time farm intelligence for Indian agriculture -- live crop recommendations, yield forecasting, farm value estimation, and weather-driven advisory, all in one flow.</p>
-    </div>
     """,
     unsafe_allow_html=True,
 )
+
+
+def render_hero():
+    checks = {
+        "Crop Model": crop_model is not None,
+        "Yield Model": yield_model is not None,
+        "Farm Value Model": farm_value_model is not None,
+        "Weather API": bool(st.secrets.get("OPENWEATHER_API_KEY", None)),
+        "AI Assistant": bool(st.secrets.get("GROQ_API_KEY", None)),
+    }
+    pills = "".join(
+        f'<div class="av-status-pill"><span class="led {"led-on" if ok else "led-off"}"></span>{name}</div>'
+        for name, ok in checks.items()
+    )
+    st.markdown(
+        f"""
+        <div class="av-hero">
+            <div class="av-hero-inner">
+                <div class="av-badge"><span class="dot"></span> LIVE AI FARM INTELLIGENCE PLATFORM</div>
+                <h1>AgriVision AI</h1>
+                <p class="sub">One connected pipeline -- your profile, live weather, crop science, yield forecasting and farm valuation all feed into a single real-time picture of the farm.</p>
+                <div class="av-status-row">{pills}</div>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+render_hero()
 
 
 def kpi_card(label, value, sub, c1, c2, icon=""):
@@ -214,29 +292,11 @@ for key, default in [
         st.session_state[key] = default
 
 # ----------------------------------------------------------------------
-# Sidebar
+# Sidebar -- kept minimal; live status now lives in the hero itself.
 # ----------------------------------------------------------------------
 with st.sidebar:
-    st.title("🌾 AgriVision AI")
-    st.caption("AI decision support for Indian agriculture")
-    st.divider()
-
-    profile = st.session_state.profile
-    if profile:
-        st.subheader("👤 Farmer Snapshot")
-        st.markdown(f"**{profile.get('farmer_id', '--')}** · {profile.get('region', '--')}")
-        st.write(f"🌱 {profile.get('current_crop', '--')} · {profile.get('total_land_ha', '--')} ha")
-        st.divider()
-    else:
-        st.caption("Fill in the Farmer Profile tab to see a live snapshot here.")
-        st.divider()
-
-    st.subheader("Model status")
-    st.write(f"Crop Model: {'🟢 live' if crop_model is not None else '🟡 missing'}")
-    st.write(f"Yield Model: {'🟢 live' if yield_model is not None else '🟡 missing'}")
-    st.write(f"Farm Value Model: {'🟢 live' if farm_value_model is not None else '🟡 missing'}")
-    st.write(f"Weather API: {'🟢 configured' if st.secrets.get('OPENWEATHER_API_KEY', None) else '🟡 not set'}")
-    st.write(f"AI Assistant (Groq): {'🟢 configured' if st.secrets.get('GROQ_API_KEY', None) else '🟡 not set'}")
+    st.markdown("### 🌾 AgriVision AI")
+    st.caption("Navigate the tabs above to move through the pipeline: Profile → Weather → Crop → Yield → Income → Report.")
 
 tabs = st.tabs(
     [
@@ -251,85 +311,120 @@ tabs = st.tabs(
 )
 
 # ----------------------------------------------------------------------
-# 0. General Dashboard -- live overview, pulls from everything else
+# 0. General Dashboard -- India agri market overview. Deliberately does
+# NOT depend on the farmer's profile -- this is the "walk up and see
+# something useful" landing screen. Personal predictions live in their
+# own tabs and roll up into Final Report.
 # ----------------------------------------------------------------------
+@st.cache_data(ttl=1800)
+def fetch_agri_news():
+    """Live headlines if NEWSAPI_KEY is set in secrets, else None
+    (caller falls back to a clearly-labeled static sample)."""
+    api_key = st.secrets.get("NEWSAPI_KEY", None)
+    if not api_key:
+        return None
+    try:
+        resp = requests.get(
+            "https://newsapi.org/v2/everything",
+            params={"q": "India agriculture", "language": "en", "sortBy": "publishedAt", "pageSize": 5, "apiKey": api_key},
+            timeout=8,
+        )
+        if resp.status_code != 200:
+            return None
+        articles = resp.json().get("articles", [])
+        return [{"title": a["title"], "source": a["source"]["name"], "url": a["url"]} for a in articles[:5]]
+    except requests.RequestException:
+        return None
+
+
 with tabs[0]:
     with st.container(border=True):
-        st.header("🚀 Live Farm Intelligence")
-        p = st.session_state.profile
-        if not p:
-            st.info("Start with the Farmer Profile tab -- everything here fills in as you go.")
-        else:
-            st.caption(f"Overview for **{p.get('farmer_id')}** · {p.get('region')} · {p.get('total_land_ha')} ha of {p.get('current_crop')}")
+        st.markdown("#### 🇮🇳 Indian Agriculture — Market Pulse")
+        st.caption("A general snapshot of Indian agriculture. Your personal predictions live in the tabs to the right.")
 
         c1, c2, c3, c4 = st.columns(4)
         with c1:
-            kpi_card(
-                "Recommended Crop",
-                st.session_state.recommended_crop.upper() if st.session_state.recommended_crop else "--",
-                f"{st.session_state.crop_confidence:.0f}% confidence" if st.session_state.crop_confidence else "Not run yet",
-                "#14532d", "#0b1a10", "🌱",
-            )
+            kpi_card("Arable Land", "~156M ha", "2nd largest in the world (FAO estimate)", "#14532d", "#0b1a10", "🌍")
         with c2:
-            kpi_card(
-                "Predicted Yield",
-                f"{st.session_state.predicted_yield:.2f} t/ha" if st.session_state.predicted_yield else "--",
-                f"{st.session_state.total_output:.1f} tonnes total" if st.session_state.total_output else "Not run yet",
-                "#78350f", "#1c1206", "📈",
-            )
+            kpi_card("Agri Workforce", "~42%", "share of India's total workforce", "#78350f", "#1c1206", "👨‍🌾")
         with c3:
-            kpi_card(
-                "Estimated Farm Value",
-                f"₹{st.session_state.farm_value_result:,.0f}" if st.session_state.farm_value_result else "--",
-                "XGBoost model, R² 0.61" if st.session_state.farm_value_result else "Not run yet",
-                "#164e63", "#071a1f", "💰",
-            )
+            kpi_card("Agri GDP Share", "~18%", "of India's gross value added", "#164e63", "#071a1f", "📊")
         with c4:
-            w = st.session_state.weather_result
-            kpi_card(
-                "Weather",
-                f"{w['temperature']}°C" if w else "--",
-                w["condition"] if w else "Not fetched yet",
-                "#4c1d95", "#160b2e", "🌦️",
+            kpi_card("Farm Households", "~146M", "mostly small & marginal holdings", "#4c1d95", "#160b2e", "🏡")
+
+        st.divider()
+        col_left, col_right = st.columns([1.3, 1])
+        with col_left:
+            st.markdown("**Illustrative Crop Price Index** *(sample data — connect a market API for live prices)*")
+            crops = ["Wheat", "Paddy", "Cotton", "Soybean", "Mustard", "Sugarcane"]
+            index_vals = [104, 98, 121, 92, 108, 101]
+            bar = go.Figure(go.Bar(x=crops, y=index_vals, marker_color="#4ade80"))
+            bar.update_layout(
+                height=280, yaxis=dict(title="Index (base 100)"),
+                paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color="#e8f0ec",
+                margin=dict(t=10),
+            )
+            st.plotly_chart(bar, use_container_width=True)
+        with col_right:
+            st.markdown("**Seasonal Crop Calendar**")
+            st.markdown(
+                """
+                <div style="display:flex;flex-direction:column;gap:10px;">
+                <div style="background:#0f1a15;border:1px solid #21362a;border-radius:12px;padding:12px 16px;">
+                <b style="color:#4ade80;">🌧️ Kharif (Jun–Oct)</b><br><span style="color:#9db3a8;">Rice, Maize, Cotton, Soybean, Groundnut</span>
+                </div>
+                <div style="background:#0f1a15;border:1px solid #21362a;border-radius:12px;padding:12px 16px;">
+                <b style="color:#facc15;">❄️ Rabi (Oct–Mar)</b><br><span style="color:#9db3a8;">Wheat, Mustard, Gram, Barley</span>
+                </div>
+                <div style="background:#0f1a15;border:1px solid #21362a;border-radius:12px;padding:12px 16px;">
+                <b style="color:#22d3ee;">☀️ Zaid (Mar–Jun)</b><br><span style="color:#9db3a8;">Watermelon, Cucumber, Moong</span>
+                </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
             )
 
         st.divider()
-        col_left, col_right = st.columns([1.4, 1])
-        with col_left:
-            if st.session_state.farm_value_result:
-                base = st.session_state.farm_value_result
-                seasons = ["Season 1", "Season 2", "Season 3", "Season 4"]
-                values = [base * f for f in (0.85, 1.05, 0.95, 1.0)]
-                fig = go.Figure()
-                fig.add_trace(go.Scatter(x=seasons, y=values, fill="tozeroy", line=dict(color="#22c55e")))
-                fig.update_layout(
-                    title="Simulated Farm Value Trend", yaxis_title="₹", height=300,
-                    paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color="#e8f0ec",
-                )
-                st.plotly_chart(fig, use_container_width=True)
-            else:
-                st.caption("Run Income Prediction to see a simulated value trend here.")
-        with col_right:
-            if p:
-                categories = ["Land", "Non-Ag Income", "Market Access", "Yield", "Farm Value"]
-                land_score = min(p.get("total_land_ha", 0) / 20, 1)
-                nonagri_score = min(p.get("non_agri_income", 0) / 50000, 1)
-                market_score = 1 - min(p.get("distance_to_market_km", 0) / 100, 1)
-                yield_score = min((st.session_state.predicted_yield or 3) / 10, 1)
-                value_score = min((st.session_state.farm_value_result or 20000) / 300000, 1)
-                values = [land_score, nonagri_score, market_score, yield_score, value_score]
-                radar = go.Figure()
-                radar.add_trace(go.Scatterpolar(r=values + values[:1], theta=categories + categories[:1], fill="toself", line_color="#22c55e"))
-                radar.update_layout(
-                    polar=dict(radialaxis=dict(visible=True, range=[0, 1], showticklabels=False), bgcolor="rgba(0,0,0,0)"),
-                    showlegend=False, height=300, title="Farmer Profile Snapshot",
-                    paper_bgcolor="rgba(0,0,0,0)", font_color="#e8f0ec",
-                )
-                st.plotly_chart(radar, use_container_width=True)
+        st.markdown("**📰 Latest in Indian Agriculture**")
+        news = fetch_agri_news()
+        if news:
+            for item in news:
+                st.markdown(f"- [{item['title']}]({item['url']}) — *{item['source']}*")
+        else:
+            if not st.secrets.get("NEWSAPI_KEY", None):
+                st.caption("Sample headlines below — add `NEWSAPI_KEY` in Streamlit secrets for a live feed.")
+            sample_news = [
+                "Government raises MSP for key Rabi crops ahead of sowing season",
+                "Monsoon forecast points to normal rainfall across major farming states",
+                "New irrigation scheme targets small and marginal farmers",
+                "Digital agriculture push: states expand soil health card coverage",
+                "Export demand for Indian spices rises amid supply chain shifts",
+            ]
+            for headline in sample_news:
+                st.markdown(f"- {headline} *(sample)*")
 
-# ----------------------------------------------------------------------
-# 1. Farmer Profile
-# ----------------------------------------------------------------------
+    st.write("")
+    with st.container(border=True):
+        st.markdown("#### Your Pipeline")
+        st.caption("Fill in your Farmer Profile, then move through the tabs — each stage below lights up as you complete it.")
+        p = st.session_state.profile
+        steps = [
+            ("1", "Profile", bool(p)),
+            ("2", "Weather", bool(st.session_state.weather_result)),
+            ("3", "Crop AI", bool(st.session_state.recommended_crop)),
+            ("4", "Yield", bool(st.session_state.predicted_yield)),
+            ("5", "Income", bool(st.session_state.farm_value_result)),
+            ("6", "Report", bool(p) and bool(st.session_state.farm_value_result)),
+        ]
+        first_incomplete = next((i for i, s in enumerate(steps) if not s[2]), None)
+        step_html = ""
+        for i, (num, label, done) in enumerate(steps):
+            state = "done" if done else ("active" if i == first_incomplete else "")
+            icon = "✓" if done else num
+            step_html += f'<div class="av-step {state}"><div class="circle">{icon}</div><div class="label">{label}</div></div>'
+        st.markdown(f'<div class="av-pipeline">{step_html}</div>', unsafe_allow_html=True)
+
+
 with tabs[1]:
     with st.container(border=True):
         st.header("Farmer Profile")
@@ -768,6 +863,71 @@ with tabs[6]:
             c2.metric("Recommended Crop", st.session_state.recommended_crop.upper() if st.session_state.recommended_crop else "Not run yet")
             c3.metric("Predicted Yield", f"{st.session_state.predicted_yield:.2f} t/ha" if st.session_state.predicted_yield else "Not run yet")
             c4.metric("Farm Value", f"₹{st.session_state.farm_value_result:,.0f}" if st.session_state.farm_value_result else "Not run yet")
+
+            st.divider()
+
+            # ---- Composite AI Farm Score ----
+            scored_parts = []
+            if st.session_state.crop_confidence:
+                scored_parts.append(st.session_state.crop_confidence)
+            if st.session_state.predicted_yield:
+                scored_parts.append(min(st.session_state.predicted_yield / 8 * 100, 100))
+            if st.session_state.farm_value_result:
+                scored_parts.append(min(st.session_state.farm_value_result / 300000 * 100, 100))
+            ai_score = sum(scored_parts) / len(scored_parts) if scored_parts else 0
+
+            if ai_score >= 75:
+                score_label, score_color = "🌟 Strong Farm Potential", "#22c55e"
+            elif ai_score >= 45:
+                score_label, score_color = "✅ Good Potential", "#facc15"
+            elif ai_score > 0:
+                score_label, score_color = "⚠️ Needs Improvement", "#f97316"
+            else:
+                score_label, score_color = "Getting Started", "#64748b"
+
+            col_score, col_charts = st.columns([1, 2])
+            with col_score:
+                gauge = go.Figure(go.Indicator(
+                    mode="gauge+number", value=ai_score,
+                    number={"font": {"size": 40, "color": score_color}},
+                    gauge={
+                        "axis": {"range": [0, 100], "tickcolor": "#3a4d41"},
+                        "bar": {"color": score_color, "thickness": 0.28}, "bgcolor": "#0d1310", "borderwidth": 0,
+                        "steps": [{"range": [0, 45], "color": "#2a1414"}, {"range": [45, 75], "color": "#2a2414"}, {"range": [75, 100], "color": "#14261a"}],
+                    },
+                ))
+                gauge.update_layout(height=210, margin=dict(l=10, r=10, t=10, b=10), paper_bgcolor="rgba(0,0,0,0)", font_color="#e8f0ec")
+                st.plotly_chart(gauge, use_container_width=True)
+                st.markdown(f"<div style='text-align:center;font-weight:800;color:{score_color};margin-top:-14px;'>{score_label}</div>", unsafe_allow_html=True)
+                st.caption("AI Farm Score -- blends crop confidence, yield, and farm value.")
+
+            with col_charts:
+                cc1, cc2 = st.columns(2)
+                with cc1:
+                    if st.session_state.farm_value_result:
+                        base = st.session_state.farm_value_result
+                        seasons = ["S1", "S2", "S3", "S4"]
+                        values = [base * f for f in (0.85, 1.05, 0.95, 1.0)]
+                        fig = go.Figure()
+                        fig.add_trace(go.Scatter(x=seasons, y=values, fill="tozeroy", line=dict(color="#22c55e")))
+                        fig.update_layout(title="Simulated Value Trend", height=210, margin=dict(t=30), paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color="#e8f0ec")
+                        st.plotly_chart(fig, use_container_width=True)
+                with cc2:
+                    categories = ["Land", "Non-Ag Income", "Market Access", "Yield", "Farm Value"]
+                    land_score = min(p.get("total_land_ha", 0) / 20, 1)
+                    nonagri_score = min(p.get("non_agri_income", 0) / 50000, 1)
+                    market_score = 1 - min(p.get("distance_to_market_km", 0) / 100, 1)
+                    yield_score = min((st.session_state.predicted_yield or 3) / 10, 1)
+                    value_score = min((st.session_state.farm_value_result or 20000) / 300000, 1)
+                    values = [land_score, nonagri_score, market_score, yield_score, value_score]
+                    radar = go.Figure()
+                    radar.add_trace(go.Scatterpolar(r=values + values[:1], theta=categories + categories[:1], fill="toself", line_color="#22c55e"))
+                    radar.update_layout(
+                        polar=dict(radialaxis=dict(visible=True, range=[0, 1], showticklabels=False), bgcolor="rgba(0,0,0,0)"),
+                        showlegend=False, height=210, title="Farmer Snapshot", margin=dict(t=30),
+                        paper_bgcolor="rgba(0,0,0,0)", font_color="#e8f0ec",
+                    )
+                    st.plotly_chart(radar, use_container_width=True)
 
             st.divider()
             report_lines = [
