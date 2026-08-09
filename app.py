@@ -230,40 +230,7 @@ st.markdown(
     """,
     unsafe_allow_html=True,
 )
-import streamlit.components.v1 as components
 
-# ----------------------------------------------------------------------
-# Streamlit Tab Auto-Scroll Script (Works in Streamlit Cloud Iframe)
-# ----------------------------------------------------------------------
-components.html(
-    """
-    <script>
-    function enableTabAutoScroll() {
-        const doc = window.parent.document;
-        const tabButtons = doc.querySelectorAll('button[role="tab"]');
-        
-        tabButtons.forEach(button => {
-            if (!button.dataset.scrollBound) {
-                button.dataset.scrollBound = "true";
-                button.addEventListener("click", () => {
-                    setTimeout(() => {
-                        const tabList = doc.querySelector('div[data-baseweb="tab-list"]');
-                        if (tabList) {
-                            tabList.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                        }
-                    }, 120);
-                });
-            }
-        });
-    }
-
-    // Run on initial load and keep checking for DOM renders
-    setInterval(enableTabAutoScroll, 300);
-    </script>
-    """,
-    height=0,
-    width=0,
-)
 
 def render_hero():
     checks = {
@@ -330,6 +297,21 @@ for key, default in [
 with st.sidebar:
     st.markdown("### 🌾 AgriVision AI")
     st.caption("Navigate the tabs above to move through the pipeline: Profile → Weather → Crop → Yield → Income → Report.")
+
+# ----------------------------------------------------------------------
+# OPTION 2: Jump Button & Content Anchor
+# ----------------------------------------------------------------------
+st.markdown(
+    """
+    <div style="text-align: center; margin-bottom: 12px; position: relative; z-index: 10;">
+        <a href="#tab-panel" style="background: rgba(34,197,94,0.15); border: 1px solid #4ade80; color: #4ade80; padding: 6px 16px; border-radius: 999px; text-decoration: none; font-weight: 700; font-size: 0.85rem;">
+            👇 Click to Jump directly to Tab Content
+        </a>
+    </div>
+    <div id="tab-panel"></div>
+    """,
+    unsafe_allow_html=True,
+)
 
 tabs = st.tabs(
     [
@@ -505,7 +487,7 @@ with tabs[1]:
 # ----------------------------------------------------------------------
 # 2. Weather Intelligence
 # ----------------------------------------------------------------------
-WEATHER_API_KEY = st.secrets.get("WEATHER_API_KEY", None)
+WEATHER_API_KEY = st.secrets.get("WEATHER_API_KEY", None) or st.secrets.get("OPENWEATHER_API_KEY", None)
 
 
 def get_weather(city):
