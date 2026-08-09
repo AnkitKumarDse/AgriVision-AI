@@ -1,6 +1,23 @@
 """
 AgriVision AI -- Streamlit frontend
 Run with: streamlit run app.py
+
+REDESIGN NOTES (this version):
+- Tabs reordered into a flow: General Dashboard -> Farmer Profile ->
+  Weather Intelligence -> Crop Recommendation -> Yield Prediction ->
+  Income Prediction -> Final Report. Each step feeds the next via
+  st.session_state, and General Dashboard + Final Report both pull
+  from everything that's been run so far.
+- Removed a duplicate/broken "Predict Farm Value" flow that referenced
+  undefined variables (district, gender, irrigated, etc.) -- would
+  have crashed on click. Its Agricultural Support inputs are now
+  folded into the one real prediction call.
+- Removed a hardcoded Groq API key that was sitting in the file
+  unused (dead code) -- rotate that key on console.groq.com since it
+  was public in the repo. The real, working Groq call reads
+  st.secrets["GROQ_API_KEY"] like it should.
+- Bigger, bolder visual language: gradient hero title, colored KPI
+  cards, glowing active tab.
 """
 
 import base64
@@ -17,7 +34,8 @@ import streamlit as st
 st.set_page_config(page_title="AgriVision AI", page_icon="🌾", layout="wide")
 
 # ----------------------------------------------------------------------
-# Load all real models once, safely
+# Load all real models once, safely (never crash the whole app if a
+# file is missing -- show a clear message on the tab that needs it).
 # ----------------------------------------------------------------------
 @st.cache_resource
 def load_pickle(name):
@@ -50,37 +68,34 @@ def _load_farmer_icon_b64():
 FARMER_ICON_B64 = _load_farmer_icon_b64()
 
 # ----------------------------------------------------------------------
-# Styling & Floating Assistant Popover
+# Styling -- full-screen immersive hero, glass KPI cards, pipeline stepper.
 # ----------------------------------------------------------------------
 st.markdown(
     """
     <style>
-    .block-container { padding-top: 1rem; padding-bottom: 2rem; max-width: 1300px; }
+    .block-container { padding-top: 0; padding-bottom: 2rem; max-width: 1300px; }
     header[data-testid="stHeader"] { background: transparent; }
 
-    /* ---------------- HERO BANNER ---------------- */
+    /* ---------------- FULL-SCREEN HERO ---------------- */
     .av-hero {
-        margin: 0 0 1.5rem 0;
-        min-height: 50vh;
+        margin: -1rem -1rem 0 -1rem;
+        min-height: 90vh;
         display: flex; flex-direction: column; align-items: center; justify-content: center;
         text-align: center;
         position: relative; overflow: hidden;
         background: #070b09;
-        border: 1px solid rgba(74, 222, 128, 0.25);
-        border-radius: 20px;
-        padding: 3rem 1.5rem;
-        box-shadow: 0 12px 35px rgba(0, 0, 0, 0.5);
+        padding: 3rem 1.5rem 7.5rem 1.5rem;
     }
     .av-hero::before, .av-hero::after {
         content: ""; position: absolute; border-radius: 50%; filter: blur(70px);
         animation: av-float 9s ease-in-out infinite;
     }
     .av-hero::before {
-        width: 450px; height: 480px; background: radial-gradient(circle, rgba(34,197,94,0.38), transparent 70%);
+        width: 560px; height: 560px; background: radial-gradient(circle, rgba(34,197,94,0.38), transparent 70%);
         top: -160px; left: -120px;
     }
     .av-hero::after {
-        width: 400px; height: 400px; background: radial-gradient(circle, rgba(34,211,238,0.28), transparent 70%);
+        width: 480px; height: 480px; background: radial-gradient(circle, rgba(34,211,238,0.28), transparent 70%);
         bottom: -80px; right: -100px; animation-delay: 3s;
     }
     @keyframes av-float {
@@ -92,18 +107,18 @@ st.markdown(
         display: inline-flex; align-items: center; gap: 6px;
         background: rgba(34,197,94,0.1); color: #4ade80;
         border-radius: 999px; padding: 6px 16px; font-size: 0.8rem;
-        font-weight: 700; letter-spacing: 0.08em; margin-bottom: 1.2rem;
+        font-weight: 700; letter-spacing: 0.08em; margin-bottom: 1.4rem;
         border: 1px solid rgba(74,222,128,0.35);
     }
     .av-badge .dot { width: 7px; height: 7px; border-radius: 50%; background: #4ade80; animation: av-pulse-dot 1.8s infinite; }
     @keyframes av-pulse-dot { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
     .av-hero h1 {
-        font-size: clamp(2.8rem, 6vw, 4.8rem);
-        font-weight: 900; line-height: 1.05; margin-bottom: 1rem; letter-spacing: -0.04em;
+        font-size: clamp(3rem, 8vw, 6rem);
+        font-weight: 900; line-height: 0.98; margin-bottom: 1.1rem; letter-spacing: -0.04em;
         background: linear-gradient(100deg, #ffffff 10%, #4ade80 45%, #22d3ee 70%, #facc15 100%);
         -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
     }
-    .av-hero p.sub { color: #a9bdb2; font-size: clamp(0.95rem, 1.4vw, 1.15rem); margin: 0 auto 1.5rem auto; max-width: 640px; }
+    .av-hero p.sub { color: #a9bdb2; font-size: clamp(1rem, 1.6vw, 1.25rem); margin: 0 auto 1.8rem auto; max-width: 640px; }
 
     .av-status-row { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
     .av-status-pill {
@@ -115,20 +130,28 @@ st.markdown(
     .led-on { background: #4ade80; box-shadow: 0 0 8px #4ade80; }
     .led-off { background: #64748b; }
 
-    /* ---------------- TABS STYLING ---------------- */
+    /* ---------------- STICKY TABS BAR ---------------- */
+    .stTabs {
+        position: sticky !important;
+        top: 0px !important;
+        z-index: 99999 !important;
+        background-color: #070b09 !important;
+        padding-top: 10px !important;
+        padding-bottom: 10px !important;
+        margin-top: -6.2rem;
+    }
     .stTabs [data-baseweb="tab-list"] {
-        gap: 6px; border-bottom: none;
+        gap: 4px; border-bottom: none;
         background: rgba(20, 30, 24, 0.85);
         backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
         border: 1px solid rgba(74, 222, 128, 0.18);
-        border-radius: 16px; padding: 8px 12px;
-        box-shadow: 0 10px 30px rgba(0,0,0,0.4);
+        border-radius: 18px; padding: 10px 12px;
+        box-shadow: 0 20px 50px rgba(0,0,0,0.55);
         flex-wrap: wrap;
-        margin-bottom: 1rem;
     }
     .stTabs [data-baseweb="tab"] {
         background-color: transparent; border-radius: 12px;
-        padding: 12px 18px; color: #8fa89b; font-weight: 800; font-size: 0.92rem;
+        padding: 14px 20px; color: #8fa89b; font-weight: 800; font-size: 0.95rem;
         letter-spacing: 0.01em;
     }
     .stTabs [aria-selected="true"] {
@@ -150,7 +173,7 @@ st.markdown(
     }
     button[kind="primary"]:hover { filter: brightness(1.12); }
 
-    /* PIPELINE STEPPER */
+    /* ---------------- PIPELINE STEPPER ---------------- */
     .av-pipeline { display: flex; align-items: flex-start; justify-content: space-between; margin: 0.5rem 0 1.8rem 0; }
     .av-step { display: flex; flex-direction: column; align-items: center; flex: 1; position: relative; }
     .av-step .circle {
@@ -170,7 +193,7 @@ st.markdown(
     .av-step:last-child::after { display: none; }
     .av-step.done::after { background: linear-gradient(90deg, #4ade80, #2a3d31); }
 
-    /* GLASS KPI CARDS */
+    /* ---------------- GLASS KPI CARDS ---------------- */
     .kpi-card {
         border-radius: 18px; padding: 22px 24px; border: 1px solid rgba(255,255,255,0.08);
         background: linear-gradient(135deg, var(--c1), var(--c2));
@@ -182,7 +205,7 @@ st.markdown(
     .kpi-card .kpi-value { font-size: 1.85rem; font-weight: 800; color: white; margin-top: 8px; }
     .kpi-card .kpi-sub { font-size: 0.78rem; color: rgba(255,255,255,0.65); margin-top: 4px; }
 
-    /* Floating AI-assistant bubble */
+    /* ---------------- Floating AI-assistant bubble ---------------- */
     div[data-testid="stPopover"] {
         position: fixed !important; top: 58%; left: 26px; margin-top: -34px;
         z-index: 9999; width: auto !important; animation: av-bob 3.2s ease-in-out infinite;
@@ -198,10 +221,19 @@ st.markdown(
         transform: scale(1.12) rotate(-6deg); box-shadow: 0 10px 26px rgba(34, 197, 94, 0.45); border-color: #4ade80;
     }
     div[data-testid="stPopover"] button:active { transform: scale(0.9) rotate(0deg); }
+    div[data-testid="stPopover"] button::after {
+        content: "Ask me! 💬"; position: absolute; left: 82px; top: 50%;
+        transform: translateY(-50%) translateX(-6px); background: #16261d; border: 1px solid #21362a;
+        color: #e8f0ec; padding: 6px 12px; border-radius: 8px; font-size: 0.8rem; white-space: nowrap;
+        opacity: 0; pointer-events: none; transition: opacity 0.2s ease, transform 0.2s ease;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+    }
+    div[data-testid="stPopover"] button:hover::after { opacity: 1; transform: translateY(-50%) translateX(0); }
     div[data-testid="stPopoverBody"] {
         width: 340px; background-color: #131b18; border: 1px solid #21362a;
         border-radius: 14px; animation: av-panel-in 0.18s ease-out;
     }
+    @keyframes av-panel-in { 0% { opacity: 0; transform: translateY(6px) scale(0.97); } 100% { opacity: 1; transform: translateY(0) scale(1); } }
     </style>
     """,
     unsafe_allow_html=True,
@@ -235,6 +267,9 @@ def render_hero():
     )
 
 
+render_hero()
+
+
 def kpi_card(label, value, sub, c1, c2, icon=""):
     st.markdown(
         f"""
@@ -265,15 +300,12 @@ for key, default in [
         st.session_state[key] = default
 
 # ----------------------------------------------------------------------
-# Sidebar
+# Sidebar -- kept minimal; live status now lives in the hero itself.
 # ----------------------------------------------------------------------
 with st.sidebar:
     st.markdown("### 🌾 AgriVision AI")
     st.caption("Navigate the tabs above to move through the pipeline: Profile → Weather → Crop → Yield → Income → Report.")
 
-# ----------------------------------------------------------------------
-# Main Navigation Tabs (Rendered at top of page)
-# ----------------------------------------------------------------------
 tabs = st.tabs(
     [
         "🚀 General Dashboard",
@@ -287,10 +319,15 @@ tabs = st.tabs(
 )
 
 # ----------------------------------------------------------------------
-# 0. General Dashboard -- Hero Banner lives inside here
+# 0. General Dashboard -- India agri market overview. Deliberately does
+# NOT depend on the farmer's profile -- this is the "walk up and see
+# something useful" landing screen. Personal predictions live in their
+# own tabs and roll up into Final Report.
 # ----------------------------------------------------------------------
 @st.cache_data(ttl=1800)
 def fetch_agri_news():
+    """Live headlines if NEWSAPI_KEY is set in secrets, else None
+    (caller falls back to a clearly-labeled static sample)."""
     api_key = st.secrets.get("NEWSAPI_KEY", None)
     if not api_key:
         return None
@@ -309,9 +346,6 @@ def fetch_agri_news():
 
 
 with tabs[0]:
-    # Hero Banner renders inside the landing tab
-    render_hero()
-
     with st.container(border=True):
         st.markdown("#### 🇮🇳 Indian Agriculture — Market Pulse")
         st.caption("A general snapshot of Indian agriculture. Your personal predictions live in the tabs to the right.")
