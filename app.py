@@ -130,11 +130,19 @@ st.markdown(
     .led-on { background: #4ade80; box-shadow: 0 0 8px #4ade80; }
     .led-off { background: #64748b; }
 
-    /* ---------------- TABS: float as a glass bar over the hero ---------------- */
-    .stTabs { margin-top: -6.2rem; position: relative; z-index: 5; }
+    /* ---------------- STICKY TABS BAR ---------------- */
+    .stTabs {
+        position: sticky !important;
+        top: 0px !important;
+        z-index: 99999 !important;
+        background-color: #070b09 !important;
+        padding-top: 10px !important;
+        padding-bottom: 10px !important;
+        margin-top: -6.2rem;
+    }
     .stTabs [data-baseweb="tab-list"] {
         gap: 4px; border-bottom: none;
-        background: rgba(20, 30, 24, 0.75);
+        background: rgba(20, 30, 24, 0.85);
         backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
         border: 1px solid rgba(74, 222, 128, 0.18);
         border-radius: 18px; padding: 10px 12px;
@@ -297,21 +305,6 @@ for key, default in [
 with st.sidebar:
     st.markdown("### 🌾 AgriVision AI")
     st.caption("Navigate the tabs above to move through the pipeline: Profile → Weather → Crop → Yield → Income → Report.")
-
-# ----------------------------------------------------------------------
-# OPTION 2: Jump Button & Content Anchor
-# ----------------------------------------------------------------------
-st.markdown(
-    """
-    <div style="text-align: center; margin-bottom: 12px; position: relative; z-index: 10;">
-        <a href="#tab-panel" style="background: rgba(34,197,94,0.15); border: 1px solid #4ade80; color: #4ade80; padding: 6px 16px; border-radius: 999px; text-decoration: none; font-weight: 700; font-size: 0.85rem;">
-            👇 Click to Jump directly to Tab Content
-        </a>
-    </div>
-    <div id="tab-panel"></div>
-    """,
-    unsafe_allow_html=True,
-)
 
 tabs = st.tabs(
     [
